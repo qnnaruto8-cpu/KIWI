@@ -10,7 +10,7 @@ from config import TELEGRAM_TOKEN
 from database import users_col, codes_col, update_balance, get_balance, check_registered, register_user, update_group_activity
 from ai_chat import get_yuki_response
 
-# MODULES (Bet ab alag hai)
+# MODULES
 import admin, start, help, group, leaderboard, pay, bank, bet
 
 # --- FLASK SERVER ---
@@ -53,19 +53,18 @@ async def group_join_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     bal = get_balance(user.id)
-    await update.message.reply_text(f"💳 **{user.first_name}'s Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN, quote=True)
+    # ⚠️ FIX: Markdown hata diya naam se taaki error na aaye
+    await update.message.reply_text(f"💳 {user.first_name}'s Balance: ₹{bal}", quote=True)
 
 async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await ensure_registered(update, context): return
     user = update.effective_user
     
-    # Check Argument
     if not context.args: 
         msg = await update.message.reply_text("⚠️ Usage: `/redeem <code>`", quote=True)
         context.job_queue.run_once(delete_job, 5, chat_id=msg.chat_id, data=msg.message_id)
         return
 
-    # 🔥 FIX: Remove spaces
     code_name = context.args[0].strip()
 
     code_data = codes_col.find_one({"code": code_name})
@@ -93,8 +92,6 @@ async def callback_handler(update, context):
     q = update.callback_query
     data = q.data
     uid = q.from_user.id
-    
-    # 🔥 ROUTING TO MODULES 🔥
     
     # 1. Bet Logic (bet.py)
     if data.startswith(("set_", "clk_", "cash_", "close_", "noop_")):
@@ -210,4 +207,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
