@@ -21,13 +21,21 @@ except Exception as e:
 
 # --- USER FUNCTIONS ---
 
+def update_username(user_id, name):
+    """Har message par naam update karega taaki 'Unknown' na dikhe"""
+    users_col.update_one({"_id": user_id}, {"$set": {"name": name}}, upsert=True)
+
 def check_registered(user_id):
     """Check if user exists"""
     return users_col.find_one({"_id": user_id}) is not None
 
 def register_user(user_id, name):
     """Register new user with Bonus & Stats"""
-    if check_registered(user_id): return False
+    if check_registered(user_id): 
+        # Agar already registered hai, toh bas naam update kar do
+        update_username(user_id, name)
+        return False
+        
     user = {
         "_id": user_id, 
         "name": name, 
@@ -36,7 +44,8 @@ def register_user(user_id, name):
         "loan": 0,            # Loan status
         "titles": [],
         "kills": 0,
-        "protection": 0
+        "protection": 0,
+        "is_dead": False      # <-- New Dead Status
     } 
     users_col.insert_one(user)
     return True
@@ -54,7 +63,7 @@ def get_balance(user_id):
     user = users_col.find_one({"_id": user_id})
     return user["balance"] if user else 0
 
-# --- 🔥 NEW: BANK FUNCTIONS ---
+# --- BANK FUNCTIONS ---
 
 def get_bank_balance(user_id):
     """Bank ka balance batayega"""
@@ -74,13 +83,20 @@ def set_loan(user_id, amount):
     """Loan update karega (Lena ya chukana)"""
     users_col.update_one({"_id": user_id}, {"$set": {"loan": amount}}, upsert=True)
 
-# --- NEW: KILL & CRIME STATS ---
+# --- CRIME & STATUS FUNCTIONS ---
 
 def update_kill_count(user_id):
     """Kill count badhayega"""
     users_col.update_one({"_id": user_id}, {"$inc": {"kills": 1}}, upsert=True)
 
-# --- NEW: PROTECTION SYSTEM ---
+def set_dead(user_id, status: bool):
+    """User ko Dead (True) ya Alive (False) set karega"""
+    users_col.update_one({"_id": user_id}, {"$set": {"is_dead": status}}, upsert=True)
+
+def is_dead(user_id):
+    """Check karega banda mara hua hai ya zinda"""
+    user = users_col.find_one({"_id": user_id})
+    return user.get("is_dead", False) if user else False
 
 def set_protection(user_id, duration_hours):
     """User ko shield dega"""
@@ -93,7 +109,7 @@ def is_protected(user_id):
     if not user or "protection" not in user: return False
     return time.time() < user["protection"]
 
-# --- NEW: ECONOMY & RESET ---
+# --- ECONOMY & ADMIN ---
 
 def get_economy_status():
     """Economy ON hai ya OFF check karega"""
@@ -111,7 +127,7 @@ def wipe_database():
     investments_col.delete_many({})
     return True
 
-# --- GROUP & MARKET FUNCTIONS ---
+# --- GROUP & MARKET ---
 
 def update_group_activity(group_id, group_name):
     """Increase group activity score"""
@@ -127,33 +143,18 @@ def get_group_price(group_id):
     if not grp: return 10.0
     return round(10 + (grp.get("activity", 0) * 0.5), 2)
 
-# --- API KEY MANAGEMENT FUNCTIONS ---
+# --- API KEYS ---
 
 def add_api_key(api_key):
-    """Admin se Key lekar DB me save karega"""
-    if keys_col.find_one({"key": api_key}):
-        return False 
+    if keys_col.find_one({"key": api_key}): return False 
     keys_col.insert_one({"key": api_key})
     return True
 
 def remove_api_key(api_key):
-    """Key delete karega"""
     result = keys_col.delete_one({"key": api_key})
     return result.deleted_count > 0
 
 def get_all_keys():
-    """Saari keys ki list return karega AI Chat ke liye"""
     keys = list(keys_col.find({}, {"_id": 0, "key": 1}))
     return [k["key"] for k in keys]
-    
-# --- database.py ke end mein ye add karo ---
-
-def set_dead(user_id, status: bool):
-    """User ko Dead (True) ya Alive (False) set karega"""
-    users_col.update_one({"_id": user_id}, {"$set": {"is_dead": status}}, upsert=True)
-
-def is_dead(user_id):
-    """Check karega banda mara hua hai ya zinda"""
-    user = users_col.find_one({"_id": user_id})
-    return user.get("is_dead", False) if user else False
     
