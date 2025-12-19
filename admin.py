@@ -3,9 +3,9 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from config import OWNER_ID
 from database import (
-    users_col, codes_col, update_balance, 
+    users_col, groups_col, codes_col, update_balance, # <-- groups_col added
     add_api_key, remove_api_key, get_all_keys,
-    wipe_database, set_economy_status, get_economy_status # <-- New Imports
+    wipe_database, set_economy_status, get_economy_status
 )
 
 # --- BROADCAST & MONEY COMMANDS ---
@@ -15,14 +15,31 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args: return await update.message.reply_text("⚠️ Message toh likho!")
 
     msg = " ".join(context.args)
+    
+    # 1. Users ko bhejo
     users = users_col.find({})
-    count = 0
+    user_count = 0
     for u in users:
         try: 
             await context.bot.send_message(u["_id"], f"📢 **NOTICE**\n\n{msg}", parse_mode=ParseMode.MARKDOWN)
-            count += 1
+            user_count += 1
         except: pass
-    await update.message.reply_text(f"✅ Broadcast Sent to {count} users.")
+
+    # 2. Groups ko bhejo
+    groups = groups_col.find({})
+    group_count = 0
+    for g in groups:
+        try:
+            await context.bot.send_message(g["_id"], f"📢 **NOTICE**\n\n{msg}", parse_mode=ParseMode.MARKDOWN)
+            group_count += 1
+        except: pass
+
+    await update.message.reply_text(
+        f"✅ **Broadcast Complete!**\n\n"
+        f"👤 Sent to Users: `{user_count}`\n"
+        f"👥 Sent to Groups: `{group_count}`",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 async def create_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
@@ -82,7 +99,7 @@ async def list_keys_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keys = get_all_keys()
     await update.message.reply_text(f"🔑 **Total Active API Keys:** `{len(keys)}`", parse_mode=ParseMode.MARKDOWN)
 
-# --- 🔥 NEW: ECONOMY & RESET ---
+# --- 🔥 ECONOMY & RESET ---
 
 async def economy_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Economy ON/OFF switch"""
@@ -124,4 +141,4 @@ async def reset_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "cancel_wipe":
         await query.message.delete()
-                    
+        
