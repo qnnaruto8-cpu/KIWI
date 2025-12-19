@@ -35,7 +35,7 @@ async def ensure_registered(update, context):
     user = update.effective_user
     if not check_registered(user.id):
         kb = [[InlineKeyboardButton("📝 Register", callback_data=f"reg_start_{user.id}")]]
-        await update.message.reply_text(f"🛑 **{user.first_name}, Register First!**\nGet ₹500 Bonus.", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN, quote=True)
+        await update.message.reply_text(f"🛑 **{user.first_name}, Register First!**\nGet ₹500 Bonus.", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
         return False
     return True
 
@@ -46,38 +46,37 @@ async def group_join_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if member.id == context.bot.id:
             adder = update.message.from_user
             update_balance(adder.id, 1000)
-            await update.message.reply_text(f"🎉 **Thanks {adder.first_name}!**\nAdded ₹1000 to your wallet!", quote=True)
+            await update.message.reply_text(f"🎉 **Thanks {adder.first_name}!**\nAdded ₹1000 to your wallet!")
 
 # --- COMMANDS ---
 
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     bal = get_balance(user.id)
-    # 🔥 FIX: No ParseMode for name (Fixes Crash for Stylish Names)
-    await update.message.reply_text(f"💳 {user.first_name}'s Balance: ₹{bal}", quote=True)
+    # 🔥 FIX: No quote=True, No ParseMode for name
+    await update.message.reply_text(f"💳 {user.first_name}'s Balance: ₹{bal}")
 
 async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await ensure_registered(update, context): return
     user = update.effective_user
     
     if not context.args: 
-        msg = await update.message.reply_text("⚠️ Usage: `/redeem <code>`", quote=True)
+        msg = await update.message.reply_text("⚠️ Usage: `/redeem <code>`")
         context.job_queue.run_once(delete_job, 5, chat_id=msg.chat_id, data=msg.message_id)
         return
 
-    # 🔥 FIX: Spaces remove kiye
     code_name = context.args[0].strip()
 
     code_data = codes_col.find_one({"code": code_name})
-    if not code_data: return await update.message.reply_text("❌ Invalid Code!", quote=True)
-    if user.id in code_data.get("redeemed_by", []): return await update.message.reply_text("⚠️ Already redeemed!", quote=True)
-    if len(code_data.get("redeemed_by", [])) >= code_data.get("limit", 0): return await update.message.reply_text("❌ Code Expired!", quote=True)
+    if not code_data: return await update.message.reply_text("❌ Invalid Code!")
+    if user.id in code_data.get("redeemed_by", []): return await update.message.reply_text("⚠️ Already redeemed!")
+    if len(code_data.get("redeemed_by", [])) >= code_data.get("limit", 0): return await update.message.reply_text("❌ Code Expired!")
     
     amount = code_data["amount"]
     update_balance(user.id, amount)
     codes_col.update_one({"code": code_name}, {"$push": {"redeemed_by": user.id}})
     
-    await update.message.reply_text(f"🎉 **Redeemed!**\nAdded: ₹{amount}\nBalance: ₹{get_balance(user.id)}", parse_mode=ParseMode.MARKDOWN, quote=True)
+    await update.message.reply_text(f"🎉 **Redeemed!**\nAdded: ₹{amount}\nBalance: ₹{get_balance(user.id)}", parse_mode=ParseMode.MARKDOWN)
 
 async def shop_menu(update, context):
     if not await ensure_registered(update, context): return
@@ -86,7 +85,7 @@ async def shop_menu(update, context):
     for k, v in SHOP_ITEMS.items():
         kb.append([InlineKeyboardButton(f"{v['name']} - ₹{v['price']}", callback_data=f"buy_{k}_{uid}")])
     kb.append([InlineKeyboardButton("❌ Close", callback_data=f"close_{uid}")])
-    await update.message.reply_text("🛒 **VIP SHOP**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN, quote=True)
+    await update.message.reply_text("🛒 **VIP SHOP**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
 # --- CALLBACK HANDLER ---
 async def callback_handler(update, context):
@@ -132,7 +131,7 @@ async def handle_message(update, context):
     if not update.message or not update.message.text: return
     text = update.message.text
 
-    # 🔥 FIX: Update Name in DB (Fixes 'Unknown' Issue)
+    # Update Name
     update_username(user.id, user.first_name)
 
     if chat.type in ["group", "supergroup"]:
@@ -152,7 +151,7 @@ async def handle_message(update, context):
     if should_reply:
         await context.bot.send_chat_action(chat_id=chat.id, action="typing")
         ai_reply = get_yuki_response(user.id, text, user.first_name)
-        await update.message.reply_text(ai_reply, quote=True)
+        await update.message.reply_text(ai_reply)
 
 # --- MAIN ---
 def main():
@@ -207,4 +206,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+           
