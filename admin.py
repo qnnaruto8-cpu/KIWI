@@ -2,10 +2,9 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from config import OWNER_ID
-# 👇 Naye Database functions import kiye hain
 from database import users_col, codes_col, update_balance, add_api_key, remove_api_key, get_all_keys
 
-# --- EXISTING COMMANDS (Broadcast & Money) ---
+# --- EXISTING COMMANDS ---
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
@@ -38,19 +37,18 @@ async def add_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: 
         update_balance(int(context.args[0]), int(context.args[1]))
         await update.message.reply_text("✅ Money Added")
-    except: pass
+    except: await update.message.reply_text("⚠️ Usage: `/add <user_id> <amount>`") # <-- Error Added
 
 async def take_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
     try: 
         update_balance(int(context.args[0]), -int(context.args[1]))
         await update.message.reply_text("✅ Money Taken")
-    except: pass
+    except: await update.message.reply_text("⚠️ Usage: `/take <user_id> <amount>`")
 
-# --- 🔥 NEW: API KEY COMMANDS ---
+# --- 🔥 API KEY COMMANDS ---
 
 async def add_key_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin command to add Gemini API Key"""
     if update.effective_user.id != OWNER_ID: return
     
     try:
@@ -62,12 +60,10 @@ async def add_key_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await update.message.reply_text("⚠️ Usage: `/addkey <AIzaSy...>`")
     
-    # Security: Message delete kar do taaki key kisi aur ko na dikhe
     try: await update.message.delete()
     except: pass
 
 async def remove_key_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin command to remove API Key"""
     if update.effective_user.id != OWNER_ID: return
     
     try:
@@ -83,11 +79,7 @@ async def remove_key_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
 
 async def list_keys_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Count active keys"""
     if update.effective_user.id != OWNER_ID: return
-    
     keys = get_all_keys()
-    count = len(keys)
-    # Hum keys show nahi karenge security ke liye, bas count batayenge
-    await update.message.reply_text(f"🔑 **Total Active API Keys:** `{count}`", parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(f"🔑 **Total Active API Keys:** `{len(keys)}`", parse_mode=ParseMode.MARKDOWN)
     
