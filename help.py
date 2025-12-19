@@ -4,20 +4,14 @@ from telegram.ext import ContextTypes
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
-        "📚 **COMMAND LIST**\n\n"
-        "🎮 **GAME:**\n"
-        "`/bet <amount>` - Game khelo (e.g. /bet 100)\n"
-        "`/balance` - Apna paisa check karo\n\n"
-        
-        "📈 **MARKET & GROUP:**\n"
-        "`/ranking` - Top 10 Groups Image ke saath\n"
-        "`/market` - Group ka Share Price dekho\n"
-        "`/invest <amount>` - Group me paisa lagao\n"
-        "`/sell` - Shares bech kar profit lo\n\n"
-        
-        "🛒 **SHOP:**\n"
-        "`/shop` - Titles khareedo\n"
-        "`/redeem <code>` - Promo code use karo"
+        "📚 **COMMANDS**\n"
+        "🎮 `/bet 100` - Play Mines\n"
+        "🏆 `/top` - Rich List (Leaderboard)\n"
+        "🏢 `/ranking` - Group Market\n"
+        "🛒 `/shop` - Buy VIP Titles\n"
+        "💰 `/balance` - Check Money\n"
+        "📈 `/market` - Check Share Price\n"
+        "🎁 `/redeem <code>` - Promo Code"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-  
+    
