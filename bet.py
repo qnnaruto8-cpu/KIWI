@@ -26,7 +26,7 @@ async def bet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = update.effective_chat.id
     
-    # 1. Clean User Command (Agar Admin hai to delete karega)
+    # 1. Clean User Command
     try: await update.message.delete()
     except: pass 
 
@@ -34,7 +34,6 @@ async def bet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_registered(user.id):
         kb = [[InlineKeyboardButton("📝 Register", callback_data=f"reg_start_{user.id}")]]
         msg = await update.message.reply_text(f"🛑 **{user.first_name}, Register First!**", reply_markup=InlineKeyboardMarkup(kb))
-        # 10 Sec baad delete
         context.job_queue.run_once(delete_msg, 10, chat_id=chat_id, data=msg.message_id)
         return
     
@@ -78,6 +77,36 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = q.from_user.id
     parts = data.split("_")
     act = parts[0]
+
+    # --- 🔥 NEW: REBET (PLAY AGAIN) ---
+    if act == "rebet":
+        bet_amount = int(parts[1])
+        owner = int(parts[2])
+
+        if uid != owner:
+            await q.answer("Ye button tumhare liye nahi hai!", show_alert=True)
+            return
+
+        # Check Balance Again
+        if get_balance(owner) < bet_amount:
+            await q.answer("Balance khatam ho gaya!", show_alert=True)
+            return
+
+        # Show Difficulty Menu Again
+        kb = [
+            [InlineKeyboardButton("🟢 1 Bomb", callback_data=f"set_1_{bet_amount}_{owner}"), InlineKeyboardButton("🟡 3 Bombs", callback_data=f"set_3_{bet_amount}_{owner}")],
+            [InlineKeyboardButton("🔴 5 Bombs", callback_data=f"set_5_{bet_amount}_{owner}"), InlineKeyboardButton("💀 10 Bombs", callback_data=f"set_10_{bet_amount}_{owner}")],
+            [InlineKeyboardButton("❌ Cancel", callback_data=f"close_{owner}")]
+        ]
+        
+        await q.edit_message_text(
+            f"🎮 **Game Setup ({q.from_user.first_name})**\n"
+            f"💰 Bet Amount: ₹{bet_amount}\n"
+            f"💣 Select Difficulty 👇", 
+            reply_markup=InlineKeyboardMarkup(kb), 
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
 
     # --- 1. GAME SETUP (Set Bombs) ---
     if act == "set":
@@ -132,8 +161,15 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # BOMB LOGIC
         if game["grid"][idx] == 1:
             del active_games[f"{owner}"]
-            # User ka naam dikhayega taaki pata chale kisne haara
-            await q.edit_message_text(f"💥 **BOOM!**\n👤 {update.effective_user.first_name}\n📉 Lost: ₹{game['bet']}", parse_mode=ParseMode.MARKDOWN)
+            
+            # 🔥 NEW BUTTON: Play Again on Loss
+            kb = [[InlineKeyboardButton("🔄 New Game", callback_data=f"rebet_{game['bet']}_{owner}")]]
+            
+            await q.edit_message_text(
+                f"💥 **BOOM!**\n👤 {update.effective_user.first_name}\n📉 Lost: ₹{game['bet']}", 
+                reply_markup=InlineKeyboardMarkup(kb),
+                parse_mode=ParseMode.MARKDOWN
+            )
         
         # SAFE LOGIC
         else:
@@ -144,7 +180,15 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 win = int(game["bet"] * mults[-1])
                 update_balance(owner, win)
                 del active_games[f"{owner}"]
-                await q.edit_message_text(f"👑 **JACKPOT! WON ₹{win}**\n👤 {update.effective_user.first_name}", parse_mode=ParseMode.MARKDOWN)
+                
+                # 🔥 NEW BUTTON: Play Again on Jackpot
+                kb = [[InlineKeyboardButton("🔄 New Game", callback_data=f"rebet_{game['bet']}_{owner}")]]
+                
+                await q.edit_message_text(
+                    f"👑 **JACKPOT! WON ₹{win}**\n👤 {update.effective_user.first_name}", 
+                    reply_markup=InlineKeyboardMarkup(kb),
+                    parse_mode=ParseMode.MARKDOWN
+                )
             else:
                 kb = []
                 for r in range(4):
@@ -181,9 +225,17 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         win = int(game["bet"] * mults[len(game["rev"])-1])
         
         update_balance(owner, win)
+        bet_amount = game['bet'] # Save bet amount for re-bet button
         del active_games[f"{owner}"]
         
-        await q.edit_message_text(f"💰 **Cashed Out: ₹{win}**\n👤 {update.effective_user.first_name}", parse_mode=ParseMode.MARKDOWN)
+        # 🔥 NEW: ADDED NEW GAME BUTTON
+        kb = [[InlineKeyboardButton("🔄 New Game", callback_data=f"rebet_{bet_amount}_{owner}")]]
+        
+        await q.edit_message_text(
+            f"💰 **Cashed Out: ₹{win}**\n👤 {update.effective_user.first_name}", 
+            reply_markup=InlineKeyboardMarkup(kb),
+            parse_mode=ParseMode.MARKDOWN
+        )
 
     # --- 4. CLOSE / NOOP ---
     if act == "close": 
@@ -192,4 +244,4 @@ async def bet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.delete()
         
     if act == "noop": await q.answer("Ye khul chuka hai!", show_alert=False)
-    
+        
