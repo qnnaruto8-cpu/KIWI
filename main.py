@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 from config import TELEGRAM_TOKEN, GRID_SIZE, DELETE_TIMER
 from database import users_col, codes_col, get_user, update_balance, get_balance, check_registered, register_user, update_group_activity
 from ai_chat import get_yuki_response
-import admin, start, help, group, leaderboard
+import admin, start, help, group, leaderboard, pay # <-- PAY ADDED
 
 # --- FLASK SERVER (FOR UPTIME) ---
 app = Flask('')
@@ -43,7 +43,6 @@ async def ensure_registered(update, context):
     user = update.effective_user
     if not check_registered(user.id):
         kb = [[InlineKeyboardButton("📝 Register", callback_data=f"reg_start_{user.id}")]]
-        # Group me reply karke batayega
         await update.message.reply_text(f"🛑 **{user.first_name}, Register First!**\nGet ₹500 Bonus.", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
         return False
     return True
@@ -53,7 +52,6 @@ async def ensure_registered(update, context):
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     bal = get_balance(user.id)
-    # Quote reply taaki group me pata chale kiska balance hai
     await update.message.reply_text(f"💳 **{user.first_name}'s Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN, quote=True)
 
 async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -77,14 +75,11 @@ async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def bet_menu(update, context):
     if not await ensure_registered(update, context): return
-    
-    # Try delete (Group me fail ho sakta hai agar admin nahi hai, isliye pass)
     try: await update.message.delete()
     except: pass
     
     try: bet = int(context.args[0])
     except: 
-        # Group me user ko tag karke batao galti
         msg = await update.message.reply_text("⚠️ **Format:** `/bet 100`", parse_mode=ParseMode.MARKDOWN, quote=True)
         context.job_queue.run_once(delete_job, 5, chat_id=msg.chat_id, data=msg.message_id)
         return
@@ -111,7 +106,7 @@ async def shop_menu(update, context):
     kb.append([InlineKeyboardButton("❌ Close", callback_data=f"close_{uid}")])
     await update.message.reply_text("🛒 **VIP SHOP**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
-# --- 🔥 FIXED CALLBACK HANDLER (GROUP SUPPORT) ---
+# --- CALLBACK HANDLER ---
 async def callback_handler(update, context):
     q = update.callback_query
     data = q.data
@@ -131,37 +126,31 @@ async def callback_handler(update, context):
     parts = data.split("_")
     act = parts[0]
     
-    # SHOP BUY
     if act == "buy":
         target_id = int(parts[2])
         if uid != target_id:
             await q.answer("Apna Shop Kholo! 🛒", show_alert=True)
-            return
-            
+            return 
         item = SHOP_ITEMS.get(parts[1])
         if get_balance(uid) < item["price"]: 
             await q.answer("Paisa nahi hai! ❌", show_alert=True)
             return
-            
         update_balance(uid, -item["price"])
         users_col.update_one({"_id": uid}, {"$push": {"titles": item["name"]}})
         await q.answer(f"✅ Bought {item['name']}!")
         await q.message.delete()
         return
 
-    # GAME SETUP
     if act == "set":
         owner = int(parts[3])
         if uid != owner:
             await q.answer("Ye game tumhara nahi hai! 🚫", show_alert=True)
             return
-            
         mines = int(parts[1]); bet = int(parts[2])
         if get_balance(owner) < bet: 
             await q.answer("Balance khatam ho gaya! 📉", show_alert=True)
             await q.message.delete()
             return
-            
         update_balance(owner, -bet)
         grid = [0]*(GRID_SIZE**2)
         for i in random.sample(range(16), mines): grid[i] = 1
@@ -174,52 +163,44 @@ async def callback_handler(update, context):
         await q.edit_message_text(f"💣 Mines: {mines} | Bet: ₹{bet}", reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    # GAME CLICK
     if act == "clk":
         owner = int(parts[2])
         if uid != owner:
             await q.answer("Apna game khelo bhai! 😒", show_alert=True)
             return
-            
         game = active_games.get(f"{owner}")
         if not game: 
             await q.answer("Game Expired / Error ❌", show_alert=True)
             await q.message.delete()
             return
-            
         idx = int(parts[1])
         
-        # Already Clicked Check
         if idx in game["rev"]:
             await q.answer("Already Open Hai! 👀", show_alert=False)
             return
 
-        if game["grid"][idx] == 1: # BOMB
+        if game["grid"][idx] == 1:
             del active_games[f"{owner}"]
             await q.edit_message_text(f"💥 **BOOM!** Lost ₹{game['bet']}", parse_mode=ParseMode.MARKDOWN)
             context.job_queue.run_once(delete_job, DELETE_TIMER, chat_id=q.message.chat_id, data=q.message.message_id)
-        else: # SAFE
+        else:
             game["rev"].append(idx)
             mults = BOMB_CONFIG[game["mines"]]
-            
             if len(game["rev"]) == (16 - game["mines"]):
                 win = int(game["bet"] * mults[-1])
                 update_balance(owner, win)
                 del active_games[f"{owner}"]
                 await q.edit_message_text(f"👑 **JACKPOT! WON ₹{win}**", parse_mode=ParseMode.MARKDOWN)
             else:
-                # Update Grid
                 kb = []
                 for r in range(4):
                     row = []
                     for c in range(4):
                         i = r*4+c
                         if i in game["rev"]:
-                            txt = "💎"
-                            cb = f"noop_{i}" # No Operation
+                            txt = "💎"; cb = f"noop_{i}"
                         else:
-                            txt = "🟦"
-                            cb = f"clk_{i}_{owner}"
+                            txt = "🟦"; cb = f"clk_{i}_{owner}"
                         row.append(InlineKeyboardButton(txt, callback_data=cb))
                     kb.append(row)
                 win_now = int(game["bet"] * mults[len(game["rev"])-1])
@@ -227,19 +208,16 @@ async def callback_handler(update, context):
                 await q.edit_message_text(f"💎 Safe! Current Win: ₹{win_now}", reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    # CASHOUT
     if act == "cash":
         owner = int(parts[1])
         if uid != owner:
             await q.answer("Haath mat lagana! 😡", show_alert=True)
             return
-            
         game = active_games.get(f"{owner}")
         if not game:
             await q.answer("Game Khatam!", show_alert=True)
             await q.message.delete()
             return
-
         mults = BOMB_CONFIG[game["mines"]]
         win = int(game["bet"] * mults[len(game["rev"])-1])
         update_balance(owner, win)
@@ -247,7 +225,6 @@ async def callback_handler(update, context):
         await q.edit_message_text(f"💰 **Cashed Out: ₹{win}**", parse_mode=ParseMode.MARKDOWN)
         context.job_queue.run_once(delete_job, DELETE_TIMER, chat_id=q.message.chat_id, data=q.message.message_id)
 
-    # CLOSE / CANCEL
     if act == "close": 
         owner = int(parts[1])
         if uid != owner:
@@ -255,9 +232,7 @@ async def callback_handler(update, context):
             return
         await q.message.delete()
         
-    # NO OP (For already opened gems)
-    if act == "noop":
-        await q.answer("Ye khul chuka hai!", show_alert=False)
+    if act == "noop": await q.answer("Ye khul chuka hai!", show_alert=False)
 
 # --- MESSAGE HANDLER ---
 async def handle_message(update, context):
@@ -266,13 +241,10 @@ async def handle_message(update, context):
     if not update.message or not update.message.text: return
     text = update.message.text
 
-    # 1. Activity Tracking
     if chat.type in ["group", "supergroup"]:
         update_group_activity(chat.id, chat.title)
 
-    # 2. Yuki Response Logic
     should_reply = False
-    
     if chat.type == "private":
         should_reply = True
     elif chat.type in ["group", "supergroup"]:
@@ -293,19 +265,35 @@ def main():
     keep_alive()
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     
+    # Basic
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("help", help.help_command))
+    
+    # Game & Eco
     app.add_handler(CommandHandler("balance", balance_cmd))
     app.add_handler(CommandHandler("bet", bet_menu))
     app.add_handler(CommandHandler("shop", shop_menu))
     app.add_handler(CommandHandler("redeem", redeem_code))
     
+    # Market
     app.add_handler(CommandHandler("ranking", group.ranking))
     app.add_handler(CommandHandler("market", group.market_info))
     app.add_handler(CommandHandler("invest", group.invest))
     app.add_handler(CommandHandler("sell", group.sell_shares))
     app.add_handler(CommandHandler("top", leaderboard.user_leaderboard))
     
+    # 🔥 PAY & CRIME (From pay.py)
+    app.add_handler(CommandHandler("pay", pay.pay_user))
+    app.add_handler(CommandHandler("rob", pay.rob_user))
+    app.add_handler(CommandHandler("kill", pay.kill_user))
+    app.add_handler(CommandHandler("protect", pay.protect_user))
+    app.add_handler(CommandHandler("alive", pay.check_status))
+    
+    # 🔥 RESET & ADMIN (From admin.py)
+    app.add_handler(CommandHandler("eco", admin.economy_toggle))
+    app.add_handler(CommandHandler("reset", admin.reset_menu))
+    
+    # Admin Utils
     app.add_handler(CommandHandler("cast", admin.broadcast))
     app.add_handler(CommandHandler("code", admin.create_code))
     app.add_handler(CommandHandler("add", admin.add_money))
@@ -314,7 +302,11 @@ def main():
     app.add_handler(CommandHandler("delkey", admin.remove_key_cmd))
     app.add_handler(CommandHandler("keys", admin.list_keys_cmd))
     
+    # Callbacks (Must be before MessageHandler)
+    app.add_handler(CallbackQueryHandler(admin.reset_callback, pattern="^confirm_wipe$|^cancel_wipe$"))
     app.add_handler(CallbackQueryHandler(callback_handler))
+    
+    # Messages
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
     print("🚀 BOT STARTED SUCCESSFULLY!")
@@ -322,4 +314,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+    
