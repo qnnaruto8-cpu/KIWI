@@ -8,21 +8,29 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 # IMPORTS
 from config import TELEGRAM_TOKEN, GRID_SIZE, DELETE_TIMER
 from database import users_col, codes_col, get_user, update_balance, get_balance, check_registered, register_user, update_group_activity
+from ai_chat import get_yuki_response  # <-- IMPORT AI CHAT
 import admin, start, help, group, leaderboard
 
-# SERVER
+# --- FLASK SERVER (FOR UPTIME) ---
 app = Flask('')
+
 @app.route('/')
-def home(): return "Bot OK"
-def run(): app.run(host='0.0.0.0', port=8080)
-def keep_alive(): t = Thread(target=run); t.start()
+def home():
+    return "I am Alive! 24/7"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
 # VARS
 active_games = {} 
 SHOP_ITEMS = {
     "vip":   {"name": "👑 VIP", "price": 10000},
     "god":   {"name": "⚡ God", "price": 50000},
-    "rich":  {"name": "💸 Rich", "price": 100000}
+    "rich":  {"name": "🎖️ shadow", "price": 10000000}
 }
 BOMB_CONFIG = {
     1:  [1.01, 1.08, 1.15, 1.25, 1.40, 1.55, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0], 
@@ -105,7 +113,6 @@ async def callback_handler(update, context):
         for i in random.sample(range(16), mines): grid[i] = 1
         active_games[f"{owner}"] = {"grid": grid, "rev": [], "bet": bet, "mines": mines}
         
-        # Grid Keyboard
         kb = []
         for r in range(4):
             row = []
@@ -128,7 +135,6 @@ async def callback_handler(update, context):
             if idx not in game["rev"]: game["rev"].append(idx)
             mults = BOMB_CONFIG[game["mines"]]
             
-            # CHECK WIN
             if len(game["rev"]) == (16 - game["mines"]):
                 win = int(game["bet"] * mults[-1])
                 update_balance(owner, win)
@@ -162,38 +168,71 @@ async def callback_handler(update, context):
 
     if act == "close": await q.message.delete()
 
+# --- MESSAGE HANDLER (TRACKING + AI CHAT) ---
+async def handle_message(update, context):
+    user = update.effective_user
+    chat = update.effective_chat
+    text = update.message.text
+    
+    # 1. GROUP ACTIVITY TRACKING
+    if chat.type in ["group", "supergroup"]:
+        update_group_activity(chat.id, chat.title)
+
+    # 2. YUKI AI CHAT LOGIC
+    # Reply ONLY if: Private Chat OR Reply to Bot
+    should_reply = False
+    
+    if chat.type == "private":
+        should_reply = True
+    elif update.message.reply_to_message:
+        if update.message.reply_to_message.from_user.id == context.bot.id:
+            should_reply = True
+            
+    if should_reply and text:
+        # Send Typing Action
+        await context.bot.send_chat_action(chat_id=chat.id, action="typing")
+        # Generate Response
+        ai_reply = get_yuki_response(text, user.first_name)
+        # Send Reply
+        await update.message.reply_text(ai_reply)
+
 # --- MAIN ---
 def main():
-    keep_alive()
+    keep_alive() # Starts Flask Server
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Commands
+    # User Commands
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("help", help.help_command))
     app.add_handler(CommandHandler("bet", bet_menu))
     app.add_handler(CommandHandler("shop", shop_menu))
-    app.add_handler(CommandHandler("cast", admin.broadcast))
-    app.add_handler(CommandHandler("code", admin.create_code))
-    app.add_handler(CommandHandler("add", admin.add_money))
+    app.add_handler(CommandHandler("redeem", redeem_code))
     
-    # New Modules
+    # Group & Market
     app.add_handler(CommandHandler("ranking", group.ranking))
     app.add_handler(CommandHandler("market", group.market_info))
     app.add_handler(CommandHandler("invest", group.invest))
     app.add_handler(CommandHandler("sell", group.sell_shares))
-    app.add_handler(CommandHandler("top", leaderboard.user_leaderboard)) # NEW
+    app.add_handler(CommandHandler("top", leaderboard.user_leaderboard))
+    
+    # Admin Commands
+    app.add_handler(CommandHandler("cast", admin.broadcast))
+    app.add_handler(CommandHandler("code", admin.create_code))
+    app.add_handler(CommandHandler("add", admin.add_money))
+    
+    # 🔥 NEW API KEY COMMANDS
+    app.add_handler(CommandHandler("addkey", admin.add_key_cmd))
+    app.add_handler(CommandHandler("delkey", admin.remove_key_cmd))
+    app.add_handler(CommandHandler("keys", admin.list_keys_cmd))
     
     app.add_handler(CallbackQueryHandler(callback_handler))
     
-    # Message Tracker
-    async def track(u, c):
-        if u.effective_chat.type in ["group", "supergroup"]:
-            update_group_activity(u.effective_chat.id, u.effective_chat.title)
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), track))
+    # Message Handler (Must be last)
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
-    print("🚀 BOT STARTED SUCCESSFULLY!")
+    print("🚀 BOT STARTED WITH 24/7 UPTIME & AI CHAT...")
     app.run_polling()
 
 if __name__ == "__main__":
     main()
-  
+
