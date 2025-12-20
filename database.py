@@ -13,9 +13,10 @@ try:
     investments_col = db["investments"]
     codes_col = db["codes"]
     keys_col = db["api_keys"]        # Chat Keys
-    game_keys_col = db["game_keys"]  # 🔥 Game Keys (New)
+    game_keys_col = db["game_keys"]  # Game Keys
     settings_col = db["settings"]
-    wordseek_col = db["wordseek_scores"] # 🔥 WordSeek Scores (New)
+    wordseek_col = db["wordseek_scores"] 
+    warnings_col = db["warnings"]    # 🔥 Warnings Collection (New)
 
     print("✅ Database Connected!")
 except Exception as e:
@@ -112,7 +113,8 @@ def wipe_database():
     """⚠️ DANGER: Reset Everything"""
     users_col.delete_many({})
     investments_col.delete_many({})
-    wordseek_col.delete_many({}) # Score bhi wipe honge
+    wordseek_col.delete_many({}) 
+    warnings_col.delete_many({}) # Warnings bhi clear hongi
     return True
 
 # --- GROUP & MARKET ---
@@ -144,7 +146,7 @@ def get_all_keys():
     keys = list(keys_col.find({}, {"_id": 0, "key": 1}))
     return [k["key"] for k in keys]
 
-# --- 🔥 GAME API KEYS (WordSeek) 🔥 ---
+# --- GAME API KEYS (WordSeek) ---
 
 def add_game_key(api_key):
     if game_keys_col.find_one({"key": api_key}): return False 
@@ -159,10 +161,9 @@ def get_game_keys():
     keys = list(game_keys_col.find({}, {"_id": 0, "key": 1}))
     return [k["key"] for k in keys]
 
-# --- 🔥 WORDSEEK SCORES 🔥 ---
+# --- WORDSEEK SCORES ---
 
 def update_wordseek_score(user_id, name, points, group_id):
-    """Updates Global & Group specific scores"""
     # 1. Update Global
     wordseek_col.update_one(
         {"_id": user_id},
@@ -172,7 +173,7 @@ def update_wordseek_score(user_id, name, points, group_id):
         },
         upsert=True
     )
-    # 2. Update Group (Nested Field)
+    # 2. Update Group
     wordseek_col.update_one(
         {"_id": user_id},
         {
@@ -181,15 +182,40 @@ def update_wordseek_score(user_id, name, points, group_id):
     )
 
 def get_wordseek_leaderboard(group_id=None):
-    """Returns Top 10 Players"""
     if group_id:
-        # Group Rank
         cursor = wordseek_col.find({f"group_scores.{group_id}": {"$exists": True}})
         data = list(cursor)
-        # Sort by Group Score
         data.sort(key=lambda x: x.get("group_scores", {}).get(str(group_id), 0), reverse=True)
         return data[:10]
     else:
-        # Global Rank
         cursor = wordseek_col.find().sort("global_score", -1).limit(10)
         return list(cursor)
+
+# --- 🔥 GROUP TOOLS (WARNINGS) 🔥 ---
+
+def add_warning(group_id, user_id):
+    """Warning add karta hai aur count return karta hai"""
+    data = warnings_col.find_one({"group_id": group_id, "user_id": user_id})
+    if data:
+        new_count = data["count"] + 1
+        warnings_col.update_one({"_id": data["_id"]}, {"$set": {"count": new_count}})
+        return new_count
+    else:
+        warnings_col.insert_one({"group_id": group_id, "user_id": user_id, "count": 1})
+        return 1
+
+def remove_warning(group_id, user_id):
+    """1 Warning kam karta hai"""
+    data = warnings_col.find_one({"group_id": group_id, "user_id": user_id})
+    if data and data["count"] > 0:
+        new_count = data["count"] - 1
+        if new_count == 0:
+            warnings_col.delete_one({"_id": data["_id"]})
+        else:
+            warnings_col.update_one({"_id": data["_id"]}, {"$set": {"count": new_count}})
+        return new_count
+    return 0
+
+def reset_warnings(group_id, user_id):
+    """Warnings clean karta hai (Ban ke baad)"""
+    warnings_col.delete_one({"group_id": group_id, "user_id": user_id})
