@@ -7,12 +7,10 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 # IMPORTS
 from config import TELEGRAM_TOKEN
-# 🔥 Added update_chat_stats import
 from database import users_col, codes_col, update_balance, get_balance, check_registered, register_user, update_group_activity, update_username, update_chat_stats
 from ai_chat import get_yuki_response, get_mimi_sticker
 
 # MODULES
-# 🔥 Added chatstat import
 import admin, start, help, group, leaderboard, pay, bank, bet, wordseek, grouptools, chatstat
 
 # 🔥 Import Anti-Spam
@@ -265,8 +263,8 @@ def main():
     app.add_handler(CommandHandler("end", wordseek.stop_wordseek))
     app.add_handler(CommandHandler("wrank", wordseek.wordseek_rank))
     
-    # 🔥 RANKING HANDLER (.crank / /crank) 🔥
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]crank$'), chatstat.show_leaderboard))
+    # 🔥 RANKING HANDLER (Fixed for /Crank, /CRANK and Groups) 🔥
+    app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank(?:@\w+)?$'), chatstat.show_leaderboard))
     
     # 🔥 GROUP TOOLS HANDLERS (Regex for . and /) 🔥
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]warn$'), grouptools.warn_user))
