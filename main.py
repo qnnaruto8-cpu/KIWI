@@ -146,8 +146,8 @@ async def handle_message(update, context):
         return
     # ---------------------------------------------
 
-    if not update.message or not update.message.text: return
-    text = update.message.text
+    if not update.message: return
+    text = update.message.text if update.message.text else ""
 
     # Update Data
     update_username(user.id, user.first_name)
@@ -155,13 +155,15 @@ async def handle_message(update, context):
         update_group_activity(chat.id, chat.title)
 
     # Chat Logic (Mimi/Yuki)
+    if not text: return # Agar text nahi hai (sirf media hai) to Chat AI trigger mat karo
+
     should_reply = False
     if chat.type == "private":
         should_reply = True
     elif chat.type in ["group", "supergroup"]:
         if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
             should_reply = True
-        elif "mimi" in text.lower() or "yuki" in text.lower(): # Mimi naam check
+        elif "mimi" in text.lower() or "yuki" in text.lower(): # 🔥 Mimi & Yuki Name Trigger
             should_reply = True
         elif context.bot.username in text:
             should_reply = True
@@ -205,15 +207,17 @@ def main():
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
     
-    # Old Admin commands (Backup ke liye rakhe hain, par /admin main hai)
+    # Legacy Admin commands (Backup ke liye)
     app.add_handler(CommandHandler("eco", admin.economy_toggle))
+    app.add_handler(CommandHandler("add", admin.add_money))
     
     app.add_handler(CallbackQueryHandler(admin.reset_callback, pattern="^confirm_wipe$|^cancel_wipe$"))
     app.add_handler(CallbackQueryHandler(callback_handler))
     
     # Welcome & Messages
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, group.welcome_user))
-    # 🔥 Filters.ALL taaki Text, Photo, Video sab Admin Input me jaye
+    
+    # 🔥 Filters.ALL use kiya taaki Admin Broadcast me Photo/Video bhej sake
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
     
     print("🚀 BOT STARTED SUCCESSFULLY!")
