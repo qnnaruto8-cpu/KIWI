@@ -28,8 +28,10 @@ SHOP_ITEMS = {
 }
 
 async def delete_job(context):
-    try: await context.bot.delete_message(context.job.chat_id, context.job.data)
-    except: pass
+    try:
+        await context.bot.delete_message(context.job.chat_id, context.job.data)
+    except:
+        pass
 
 async def ensure_registered(update, context):
     user = update.effective_user
@@ -39,19 +41,28 @@ async def ensure_registered(update, context):
 
 # --- COMMANDS ---
 
+# 🔥 UPDATED /bal COMMAND 🔥
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Check agar kisi ke message par reply kiya hai
+    # Logic: Agar reply hai to Target User, warna Khud User
     if update.message.reply_to_message:
         target = update.message.reply_to_message.from_user
     else:
         target = update.effective_user
 
+    # Bot Check
     if target.is_bot:
         await update.message.reply_text("🤖 Bots ke paas paise nahi hote bhai!")
         return
 
+    # Balance Fetch
     bal = get_balance(target.id)
-    await update.message.reply_text(f"💳 **{target.first_name}'s Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN)
+    
+    if target.id == update.effective_user.id:
+        # Khud ka balance
+        await update.message.reply_text(f"💳 **Your Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN)
+    else:
+        # Dusre ka balance
+        await update.message.reply_text(f"💳 **{target.first_name}'s Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN)
 
 async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -80,7 +91,10 @@ async def shop_menu(update, context):
     if not check_registered(user.id): register_user(user.id, user.first_name)
     
     uid = user.id
-    try: await update.message.delete(); except: pass
+    try:
+        await update.message.delete()
+    except:
+        pass
     
     kb = []
     for k, v in SHOP_ITEMS.items():
@@ -141,7 +155,6 @@ async def handle_message(update, context):
     chat = update.effective_chat
     
     # 🔥 1. ADMIN INPUT CHECK (Broadcast/Money) 🔥
-    # Agar Admin Panel ka koi button dabaya hai to ye function chalega
     if await admin.handle_admin_input(update, context):
         return
     # ---------------------------------------------
@@ -155,7 +168,7 @@ async def handle_message(update, context):
         update_group_activity(chat.id, chat.title)
 
     # Chat Logic (Mimi/Yuki)
-    if not text: return # Agar text nahi hai (sirf media hai) to Chat AI trigger mat karo
+    if not text: return
 
     should_reply = False
     if chat.type == "private":
@@ -163,7 +176,7 @@ async def handle_message(update, context):
     elif chat.type in ["group", "supergroup"]:
         if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
             should_reply = True
-        elif "mimi" in text.lower() or "yuki" in text.lower(): # 🔥 Mimi & Yuki Name Trigger
+        elif "mimi" in text.lower() or "yuki" in text.lower():
             should_reply = True
         elif context.bot.username in text:
             should_reply = True
@@ -181,9 +194,11 @@ def main():
     # Handlers
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("help", help.help_command))
-    app.add_handler(CommandHandler("admin", admin.admin_panel)) # 🔥 NEW ADMIN CMD
+    app.add_handler(CommandHandler("admin", admin.admin_panel))
     
-    app.add_handler(CommandHandler("balance", balance_cmd))
+    # 🔥 CHANGED BALANCE TO /bal
+    app.add_handler(CommandHandler("bal", balance_cmd)) 
+    
     app.add_handler(CommandHandler("redeem", redeem_code))
     app.add_handler(CommandHandler("shop", shop_menu))
     
@@ -207,7 +222,7 @@ def main():
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
     
-    # Legacy Admin commands (Backup ke liye)
+    # Legacy Admin
     app.add_handler(CommandHandler("eco", admin.economy_toggle))
     app.add_handler(CommandHandler("add", admin.add_money))
     
@@ -216,8 +231,6 @@ def main():
     
     # Welcome & Messages
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, group.welcome_user))
-    
-    # 🔥 Filters.ALL use kiya taaki Admin Broadcast me Photo/Video bhej sake
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
     
     print("🚀 BOT STARTED SUCCESSFULLY!")
