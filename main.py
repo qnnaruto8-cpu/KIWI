@@ -53,7 +53,7 @@ async def group_join_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     bal = get_balance(user.id)
-    # 🔥 FIX: No quote=True, No ParseMode for name (Safe for stylish names)
+    # 🔥 FIX: No quote=True, No ParseMode for name
     await update.message.reply_text(f"💳 {user.first_name}'s Balance: ₹{bal}")
 
 async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -93,8 +93,12 @@ async def callback_handler(update, context):
     data = q.data
     uid = q.from_user.id
     
+    # 🔥 0. START MENU NAVIGATION (Modern UI) 🔥
+    if data.startswith(("help_", "start_chat_ai", "back_home")):
+        await start.start_callback(update, context)
+        return
+
     # 1. Bet Logic (bet.py)
-    # 🔥 FIX: Added "rebet_" here so New Game button works
     if data.startswith(("set_", "clk_", "cash_", "close_", "noop_", "rebet_")):
         await bet.bet_callback(update, context)
         return
@@ -132,7 +136,7 @@ async def handle_message(update, context):
     if not update.message or not update.message.text: return
     text = update.message.text
 
-    # Update Name (Unknown fix)
+    # Update Name
     update_username(user.id, user.first_name)
 
     if chat.type in ["group", "supergroup"]:
@@ -207,4 +211,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+    
