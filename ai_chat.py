@@ -1,13 +1,13 @@
 import google.generativeai as genai
 from config import OWNER_NAME
-from database import get_all_keys
+from database import get_all_keys, get_sticker_packs # 🔥 Sticker Pack Import
 import random
 
 # Global Variables
 current_key_index = 0
 user_histories = {} 
 
-# Function ka naam 'get_yuki_response' hi rakha hai taaki main.py me error na aaye
+# --- TEXT GENERATION (Gemini) ---
 def get_yuki_response(user_id, user_text, user_name):
     global current_key_index, user_histories
     
@@ -46,10 +46,10 @@ def get_yuki_response(user_id, user_text, user_name):
             api_key = available_keys[current_key_index]
             genai.configure(api_key=api_key)
             
-            # 🔥 FIX: Model Name Sahi Kiya (1.5-flash)
+            # 🔥 Model 1.5-flash
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            # Generate (Bina Safety Settings ke)
+            # Generate
             response = model.generate_content(full_prompt)
             
             if not response.text: 
@@ -78,4 +78,33 @@ def get_yuki_response(user_id, user_text, user_name):
 
     # Agar saari keys fail ho jayein
     return f"Mimi abhi busy hai assignment mein! 📚\n(Error: {last_error})"
-    
+
+# --- 🔥 STICKER GENERATION (New Logic) ---
+async def get_mimi_sticker(bot):
+    """
+    1. Database se Sticker Packs layega.
+    2. Random Pack choose karega.
+    3. Us Pack se Random Sticker ID return karega.
+    """
+    try:
+        # DB se packs lo
+        packs = get_sticker_packs()
+        if not packs: return None
+
+        # Random Pack Pick karo
+        random_pack_name = random.choice(packs)
+        
+        # Telegram API se Pack ke stickers fetch karo
+        sticker_set = await bot.get_sticker_set(random_pack_name)
+        
+        if not sticker_set or not sticker_set.stickers:
+            return None
+
+        # Us pack me se Random Sticker pick karo
+        random_sticker = random.choice(sticker_set.stickers)
+        
+        return random_sticker.file_id
+
+    except Exception as e:
+        print(f"❌ Sticker Error: {e}")
+        return None
