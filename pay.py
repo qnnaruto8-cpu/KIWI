@@ -6,19 +6,37 @@ from telegram.ext import ContextTypes
 from database import (
     update_balance, get_balance, get_user, 
     set_protection, is_protected, get_economy_status, 
-    update_kill_count, set_dead, is_dead
+    update_kill_count, set_dead, is_dead,
+    check_registered, register_user  # 🔥 New Imports
 )
 
 # --- ECONOMY CONFIGS ---
 PROTECT_COST = 5000   # 1 Day protection
 HOSPITAL_FEE = 5000   # Zinda hone ka kharcha
 ROB_FAIL_PENALTY = 500 
+KILL_REWARD = 900     # 🔥 Fixed Reward for Killing
+
+# --- HELPER: REGISTER BUTTON ---
+async def send_register_button(update):
+    user = update.effective_user
+    kb = [[InlineKeyboardButton("📝 Register Now", callback_data=f"reg_start_{user.id}")]]
+    await update.message.reply_text(
+        f"🛑 **{user.first_name}, Register First!**\nGame khelne ke liye register karna zaroori hai.",
+        reply_markup=InlineKeyboardMarkup(kb),
+        quote=True
+    )
 
 # --- 1. PAY (Transfer Money) ---
 async def pay_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not get_economy_status(): return await update.message.reply_text("🔴 **Economy is OFF!**")
     
     sender = update.effective_user
+    
+    # Check if Sender is Registered
+    if not check_registered(sender.id):
+        await send_register_button(update)
+        return
+
     if is_dead(sender.id): return await update.message.reply_text("👻 **Tu mara hua hai!**\nPehle hospital ja kar ilaaj karwa.")
 
     if not update.message.reply_to_message:
@@ -26,10 +44,12 @@ async def pay_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     receiver = update.message.reply_to_message.from_user
     
-    # 🔥 FIX: Bot ko paisa na bheje
     if receiver.is_bot: return await update.message.reply_text("❌ Bot ko paisa nahi bhej sakte!")
-    
     if sender.id == receiver.id: return await update.message.reply_text("❌ Khud ko nahi bhej sakte!")
+
+    # Check if Receiver is Registered
+    if not check_registered(receiver.id):
+        return await update.message.reply_text(f"❌ **Fail!** {receiver.first_name} registered nahi hai.")
 
     try: amount = int(context.args[0])
     except: return await update.message.reply_text("⚠️ Usage: `/pay 100`")
@@ -42,7 +62,6 @@ async def pay_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"💸 **Transfer Successful!**\n👤 {sender.first_name} sent ₹{amount} to {receiver.first_name}.")
     
-    # Notify Receiver in DM
     try:
         await context.bot.send_message(
             chat_id=receiver.id, 
@@ -55,6 +74,10 @@ async def pay_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def protect_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not get_economy_status(): return await update.message.reply_text("🔴 Economy OFF.")
     user = update.effective_user
+    
+    if not check_registered(user.id):
+        await send_register_button(update)
+        return
     
     if is_dead(user.id): return await update.message.reply_text("👻 **Tu mara hua hai!** Dead body ko shield nahi milti.")
 
@@ -74,6 +97,12 @@ async def rob_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not get_economy_status(): return await update.message.reply_text("🔴 Economy OFF.")
     
     thief = update.effective_user
+    
+    # 1. Check Thief Registration
+    if not check_registered(thief.id):
+        await send_register_button(update)
+        return
+
     if is_dead(thief.id): return await update.message.reply_text("👻 Bhoot chori nahi kar sakte!")
 
     if not update.message.reply_to_message:
@@ -81,13 +110,15 @@ async def rob_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     victim = update.message.reply_to_message.from_user
     
-    # 🔥 FIX: Bot Check & Self Check
     if victim.is_bot: return await update.message.reply_text("👮 **Bot Police Bula Lega!** Use nahi loot sakte.")
     if thief.id == victim.id: return await update.message.reply_text("❌ Khud ki jeb katega?")
     
+    # 2. Check Victim Registration (Unregistered ko loot nahi sakte kyunki paisa nahi hoga)
+    if not check_registered(victim.id):
+        return await update.message.reply_text(f"⚠️ **Fail!** {victim.first_name} registered nahi hai (Gareeb hai).")
+
     if is_dead(victim.id): return await update.message.reply_text("☠️ Laash se kya lootega?")
     
-    # Checks
     if is_protected(victim.id):
         return await update.message.reply_text(f"🛡️ **Fail!** {victim.first_name} Protected hai!")
     
@@ -103,16 +134,10 @@ async def rob_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(f"🔫 **ROBBERY SUCCESS!**\nTune {victim.first_name} ke ₹{loot} uda liye! 🏃‍♂️💨")
         
-        # DM ALERT
         try:
             await context.bot.send_message(
                 chat_id=victim.id,
-                text=(
-                    f"⚠️ **YOU WERE ROBBED!**\n"
-                    f"Robber: 👤 {thief.first_name}\n"
-                    f"Lost: ₹{loot}\n"
-                    f"Use `/bank` to save money!"
-                )
+                text=(f"⚠️ **YOU WERE ROBBED!**\nRobber: 👤 {thief.first_name}\nLost: ₹{loot}\nUse `/bank` to save money!")
             )
         except Exception: pass
 
@@ -121,20 +146,31 @@ async def rob_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"👮 **POLICE AA GAYI!**\nChori pakdi gayi. Fine: ₹{ROB_FAIL_PENALTY}")
 
 
-# --- 4. KILL (Free Cost + Reward + Dead Status) ---
+# --- 4. KILL (Free Cost + Fixed Reward) ---
 async def kill_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not get_economy_status(): return await update.message.reply_text("🔴 Economy OFF.")
     
     killer = update.effective_user
+    
+    # 1. Check Killer Registration (Button Dikhayega)
+    if not check_registered(killer.id):
+        await send_register_button(update)
+        return
+
     if is_dead(killer.id): return await update.message.reply_text("👻 **Tu khud dead hai!**")
 
     if not update.message.reply_to_message: return await update.message.reply_text("⚠️ Reply karke `/kill` likho.")
     
     victim = update.message.reply_to_message.from_user
     
-    # 🔥 FIX: Bot Check & Self Check
     if victim.is_bot: return await update.message.reply_text("🤖 **SYSTEM ERROR:** Main Amar hu! Mujhe koi nahi maar sakta.")
     if killer.id == victim.id: return await update.message.reply_text("❌ Suicide mat kar bhai, life precious hai! ❤️")
+    
+    # 🔥 2. Handle Unregistered Victim (Auto Register & Kill)
+    if not check_registered(victim.id):
+        register_user(victim.id, victim.first_name)
+        # Unregistered users ke paas 500 bonus hota hai, thoda realistic banane ke liye
+        # Hum unhe register kar rahe hain taaki wo 'Dead' mark ho sakein.
     
     if is_dead(victim.id):
         return await update.message.reply_text(f"☠️ **Already Dead!**\n{victim.first_name} pehle se mara hua hai.")
@@ -142,13 +178,15 @@ async def kill_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_protected(victim.id):
         return await update.message.reply_text(f"🛡️ **Fail!** {victim.first_name} Protected hai.")
 
-    # Kill Logic
+    # 🔥 3. Kill Logic (Fixed Reward)
+    # Victim ka balance check karke deduct karo (Optional, bas realistic lagne ke liye)
     victim_bal = get_balance(victim.id)
-    loss = int(victim_bal * 0.5) 
-    update_balance(victim.id, -loss)
+    if victim_bal > 0:
+        loss = int(victim_bal * 0.5)
+        update_balance(victim.id, -loss)
     
-    bounty = int(loss * 0.5)
-    update_balance(killer.id, bounty)
+    # Killer ko Fixed Reward milega
+    update_balance(killer.id, KILL_REWARD)
     
     set_dead(victim.id, True)
     update_kill_count(killer.id)
@@ -159,29 +197,29 @@ async def kill_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💀 **MURDER!**\n"
         f"🔪 **Killer:** {killer.first_name}\n"
         f"🩸 **Victim:** {victim.first_name} (DIED)\n"
-        f"💰 **Loot:** Killer stole ₹{bounty}!",
+        f"💰 **Bounty:** Killer got ₹{KILL_REWARD}!",
         reply_markup=InlineKeyboardMarkup(kb)
     )
 
-    # DM ALERT
     try:
         await context.bot.send_message(
             chat_id=victim.id,
-            text=(
-                f"⚠️ **You were killed!**\n"
-                f"Killer: 👤 {killer.first_name}\n"
-                f"You are now dead."
-            )
+            text=(f"⚠️ **You were killed!**\nKiller: 👤 {killer.first_name}\nStatus: ☠️ DEAD\nUse /alive to check status.")
         )
     except Exception: pass
 
-# --- 5. REVIVE HANDLER (Button Click) ---
+# --- 5. REVIVE HANDLER ---
 async def revive_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user = q.from_user
     data = q.data
     
     target_id = int(data.split("_")[1])
+    
+    # Check agar button dabane wala registered nahi hai
+    if not check_registered(user.id):
+        return await q.answer("Pehle /start karke register karo!", show_alert=True)
+
     if user.id != target_id:
         return await q.answer("Ye tumhari laash nahi hai! 😠", show_alert=True)
         
@@ -205,6 +243,10 @@ async def revive_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
+    if not check_registered(user.id):
+        await send_register_button(update)
+        return
+    
     if is_dead(user.id):
         status = "☠️ **DEAD** (Use Medical)"
     elif is_protected(user.id):
@@ -214,4 +256,4 @@ async def check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     bal = get_balance(user.id)
     await update.message.reply_text(f"👤 **STATUS REPORT:**\n\n💰 Money: ₹{bal}\n❤️ Condition: {status}", parse_mode=ParseMode.MARKDOWN)
-    
+        
