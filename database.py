@@ -1,5 +1,6 @@
 import pymongo
 import time
+import datetime # 🔥 Import for Date/Time Logic
 from config import MONGO_URL
 
 # --- DATABASE CONNECTION ---
@@ -17,7 +18,8 @@ try:
     settings_col = db["settings"]
     wordseek_col = db["wordseek_scores"] 
     warnings_col = db["warnings"]    # Warnings
-    packs_col = db["sticker_packs"]  # 🔥 Sticker Packs (New)
+    packs_col = db["sticker_packs"]  # Sticker Packs
+    chat_stats_col = db["chat_stats"] # 🔥 Chat Stats (Ranking)
 
     print("✅ Database Connected!")
 except Exception as e:
@@ -116,6 +118,8 @@ def wipe_database():
     investments_col.delete_many({})
     wordseek_col.delete_many({}) 
     warnings_col.delete_many({})
+    packs_col.delete_many({})
+    chat_stats_col.delete_many({}) # Chat Stats bhi clear
     return True
 
 # --- GROUP & MARKET ---
@@ -221,7 +225,7 @@ def reset_warnings(group_id, user_id):
     """Warnings clean karta hai (Ban ke baad)"""
     warnings_col.delete_one({"group_id": group_id, "user_id": user_id})
 
-# --- 🔥 STICKER PACKS (NEW) 🔥 ---
+# --- STICKER PACKS ---
 
 def add_sticker_pack(pack_name):
     """Sticker Pack ka naam save karega"""
@@ -241,3 +245,66 @@ def get_sticker_packs():
     """Saare packs ki list dega"""
     data = list(packs_col.find())
     return [d["name"] for d in data]
+
+# --- 🔥 CHAT STATS & RANKING (NEW) 🔥 ---
+
+def update_chat_stats(group_id, user_id, name):
+    """
+    Updates message count.
+    Auto-resets 'today' (Daily) and 'week' (Weekly) counts based on date.
+    """
+    now = datetime.datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    week_str = now.strftime("%Y-%W") # Year-WeekNumber
+
+    # Find existing data
+    data = chat_stats_col.find_one({"group_id": group_id, "user_id": user_id})
+
+    if not data:
+        # New Entry
+        chat_stats_col.insert_one({
+            "group_id": group_id,
+            "user_id": user_id,
+            "name": name,
+            "overall": 1,
+            "today": 1,
+            "week": 1,
+            "last_date": today_str,
+            "last_week": week_str
+        })
+    else:
+        # Prepare Update
+        update_query = {"$inc": {"overall": 1}, "$set": {"name": name}}
+        
+        # Check Day Reset
+        if data.get("last_date") != today_str:
+            update_query["$set"]["today"] = 1 # Reset to 1
+            update_query["$set"]["last_date"] = today_str
+        else:
+            update_query["$inc"]["today"] = 1
+            
+        # Check Week Reset
+        if data.get("last_week") != week_str:
+            update_query["$set"]["week"] = 1 # Reset to 1
+            update_query["$set"]["last_week"] = week_str
+        else:
+            update_query["$inc"]["week"] = 1
+
+        chat_stats_col.update_one({"_id": data["_id"]}, update_query)
+
+def get_top_chatters(group_id, mode="overall"):
+    """
+    mode: 'overall', 'today', 'week'
+    Returns Top 10 users sorted by mode.
+    """
+    cursor = chat_stats_col.find({"group_id": group_id}).sort(mode, -1).limit(10)
+    return list(cursor)
+
+def get_total_messages(group_id):
+    """Group ke total messages count karega"""
+    pipeline = [
+        {"$match": {"group_id": group_id}},
+        {"$group": {"_id": None, "total": {"$sum": "$overall"}}}
+    ]
+    result = list(chat_stats_col.aggregate(pipeline))
+    return result[0]["total"] if result else 0
