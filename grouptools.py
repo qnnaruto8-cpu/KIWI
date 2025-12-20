@@ -35,12 +35,50 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- COMMANDS ---
 
-async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Auto Delete try karo, fail hua to ignore (matlab bot admin nahi hai)
+# 🔥 NEW: GET ID COMMAND 🔥
+async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Auto Delete command message (Optional)
     try: await update.message.delete()
     except: pass
 
-    # Admin Check (Ab ye User ko reply karega agar wo admin nahi hai)
+    chat = update.effective_chat
+    msg = update.message
+    reply = msg.reply_to_message
+    
+    text = ""
+    
+    # Scenario 1: Reply to a message
+    if reply:
+        # Original Sender ID
+        user_id = reply.from_user.id
+        text += f"👤 **User ID:** `{user_id}`\n"
+        
+        # Check if Forwarded from User
+        if reply.forward_from:
+            text += f"⏩ **Forwarded User ID:** `{reply.forward_from.id}`\n"
+        
+        # Check if Forwarded from Channel/Group
+        if reply.forward_from_chat:
+            text += f"📢 **Forwarded Chat ID:** `{reply.forward_from_chat.id}`\n"
+            
+        # Hidden Sender (User ne privacy lagayi ho)
+        if reply.forward_sender_name and not reply.forward_from and not reply.forward_from_chat:
+             text += f"⏩ **Forwarded Sender:** {reply.forward_sender_name} (ID Hidden)\n"
+
+    # Scenario 2: Direct Command (No Reply)
+    else:
+        user_id = update.effective_user.id
+        text += f"👤 **Your User ID:** `{user_id}`\n"
+
+    # Group ID (Always Show)
+    text += f"👥 **Group ID:** `{chat.id}`"
+    
+    await context.bot.send_message(chat.id, text, parse_mode=ParseMode.MARKDOWN)
+
+async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try: await update.message.delete()
+    except: pass
+
     if not await is_admin(update, context): return
 
     if not update.message.reply_to_message:
@@ -49,15 +87,12 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = update.message.reply_to_message.from_user
     chat = update.effective_chat
     
-    # Self/Bot Check
     if str(target.id) == str(OWNER_ID) or target.is_bot:
         return await update.message.reply_text("❌ Owner ya Bot ko warn nahi kar sakte!")
 
-    # Database call
     count = add_warning(chat.id, target.id)
     
     if count >= 3:
-        # Ban logic
         try:
             await chat.ban_member(target.id)
             reset_warnings(chat.id, target.id)
@@ -107,7 +142,6 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     
     try:
-        # Restore permissions
         await chat.restrict_member(
             target.id, 
             permissions=ChatPermissions(
@@ -262,14 +296,11 @@ async def unpin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_chat.send_message(f"❌ Error: {e}")
 
 async def delete_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Bot Command delete karo
     try: await update.message.delete()
     except: pass
     
-    # Check Admin
     if not await is_admin(update, context): return
 
-    # Target Message delete karo
     if update.message.reply_to_message:
         try:
             await update.message.reply_to_message.delete()
@@ -282,6 +313,7 @@ async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = (
         "🛡️ **Admin Commands** (Works with . or /)\n\n"
+        "🔸 `.id` - Get User/Group/Forward ID\n"
         "🔸 `.warn` - Warn user (3 = Ban)\n"
         "🔸 `.unwarn` - Remove warning\n"
         "🔸 `.mute` - Mute user\n"
@@ -289,10 +321,10 @@ async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔸 `.ban` - Ban user\n"
         "🔸 `.unban` - Unban user\n"
         "🔸 `.kick` - Kick user\n"
-        "🔸 `.promote` - Promote (Use 1, 2, 3 for levels)\n"
-        "🔸 `.demote` - Demote admin\n"
-        "🔸 `.title [text]` - Set admin title\n"
+        "🔸 `.promote` - Promote\n"
+        "🔸 `.demote` - Demote\n"
+        "🔸 `.title` - Set title\n"
         "🔸 `.pin` - Pin message\n"
-        "🔸 `.d` - Delete replied message"
+        "🔸 `.d` - Delete message"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
