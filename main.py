@@ -152,7 +152,8 @@ async def callback_handler(update, context):
         return
 
     # 🔥 8. CHAT STATS (Ranking) 🔥
-    if data.startswith(("rank_", "close_rank")):
+    # NOTE: 'hide_rank' use kiya hai taaki Bet logic se clash na ho
+    if data.startswith(("rank_", "hide_rank")):
         await chatstat.rank_callback(update, context)
         return
 
@@ -267,6 +268,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank(?:@\w+)?$'), chatstat.show_leaderboard))
     
     # 🔥 GROUP TOOLS HANDLERS (Regex for . and /) 🔥
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]id$'), grouptools.get_id)) # NEW ID COMMAND
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]warn$'), grouptools.warn_user))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]unwarn$'), grouptools.unwarn_user))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]mute$'), grouptools.mute_user))
