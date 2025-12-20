@@ -160,7 +160,7 @@ async def start_wordseek(update: Update, context: ContextTypes.DEFAULT_TYPE):
     hint = word_data['meaning']
 
     text = (
-        f"🔥 **WORD GRID CHALLENGE** 🔥\n\n"
+        f"🔥 **NOT WORK UPDATING BETA** 🔥\n\n"
         f"🔡 Word Length: **{length} Letters**\n"
         f"👇 *Guess the word below!*\n\n"
         f"> 💡 **Hint:** {hint}"
