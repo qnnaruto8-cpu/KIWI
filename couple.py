@@ -2,7 +2,7 @@ import os
 import random
 import io
 import asyncio
-import html  # 🔥 Added Missing Import
+import html
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -13,6 +13,7 @@ from database import users_col
 BG_IMAGE = "ccpic.png" 
 FONT_PATH = "arial.ttf" 
 
+# Coordinates (इन्हें छेड़ने की जरूरत नहीं अगर एलाइनमेंट ठीक था)
 POS_1 = (165, 205)   
 POS_2 = (660, 205)
 CIRCLE_SIZE = 360    
@@ -23,29 +24,39 @@ def to_fancy(text):
 
 # --- SYNC IMAGE PROCESSING ---
 def process_image_sync(bg_path, pfp1_bytes, pfp2_bytes, name1, name2):
-    print("🎨 [Step 3] Processing Image in CPU...")
-    
     # 1. Load Background
     try:
         bg = Image.open(bg_path).convert("RGBA")
     except:
-        print("⚠️ ccpic.png not found, creating red background.")
-        bg = Image.new('RGBA', (1200, 600), (200, 0, 0, 255)) 
+        bg = Image.new('RGBA', (1280, 720), (200, 0, 0, 255)) 
 
     # Helper for PFP
     def process_pfp(img_bytes, label_name):
-        try:
-            if img_bytes:
+        img = None
+        # Try Loading Image from Bytes
+        if img_bytes:
+            try:
                 img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
-            else:
-                raise Exception("No bytes")
-        except:
-            # Fallback PFP
-            img = Image.new('RGBA', (CIRCLE_SIZE, CIRCLE_SIZE), (random.randint(50, 200), 100, 100))
-            d = ImageDraw.Draw(img)
-            d.text((150, 100), label_name[0] if label_name else "?", fill="white", font=ImageFont.load_default())
+            except:
+                pass # Corrupt bytes
 
-        # Resize & Mask
+        # If Failed, Create Colored Initials
+        if img is None:
+            img = Image.new('RGBA', (CIRCLE_SIZE, CIRCLE_SIZE), (random.randint(50, 150), random.randint(50, 150), random.randint(150, 250)))
+            d = ImageDraw.Draw(img)
+            # Draw Initial
+            char = label_name[0].upper() if label_name else "?"
+            try:
+                # Use default PIL font scaled up roughly
+                # Note: Default font doesn't support size, so we rely on text centering or load basic font
+                fnt = ImageFont.truetype(FONT_PATH, 140)
+            except:
+                fnt = ImageFont.load_default()
+            
+            # Center Text (Basic math for fallback)
+            d.text((120, 80), char, fill="white", font=fnt)
+
+        # Resize & Mask (Circle Cut)
         img = ImageOps.fit(img, (CIRCLE_SIZE, CIRCLE_SIZE), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
         mask = Image.new('L', (CIRCLE_SIZE, CIRCLE_SIZE), 0)
         draw = ImageDraw.Draw(mask)
@@ -63,7 +74,7 @@ def process_image_sync(bg_path, pfp1_bytes, pfp2_bytes, name1, name2):
     bg.paste(img1, POS_1, img1)
     bg.paste(img2, POS_2, img2)
 
-    # 4. Text
+    # 4. Text Names
     draw = ImageDraw.Draw(bg)
     try:
         font = ImageFont.truetype(FONT_PATH, 35)
@@ -91,17 +102,24 @@ def process_image_sync(bg_path, pfp1_bytes, pfp2_bytes, name1, name2):
 
 # --- ASYNC WRAPPER ---
 async def make_couple_img(user1, user2, context):
+    
+    # 🔥 FIX: New Download Method for v20+
     async def get_bytes(u_id):
+        if not u_id: return None # Dummy ID 0
         try:
             photos = await context.bot.get_profile_photos(u_id, limit=1)
             if photos.total_count > 0:
                 file = await context.bot.get_file(photos.photos[0][-1].file_id)
-                return await file.download_as_bytearray()
+                
+                # 🔥 V20 STYLE DOWNLOAD
+                f_stream = io.BytesIO()
+                await file.download_to_memory(out=f_stream)
+                return f_stream.getvalue()
         except Exception as e:
-            print(f"⚠️ Failed to download PFP for {u_id}: {e}")
+            print(f"⚠️ PFP Download Error for {u_id}: {e}")
         return None
 
-    print("📥 [Step 2] Downloading PFPs...")
+    # Download both PFPs
     pfp1_bytes, pfp2_bytes = await asyncio.gather(
         get_bytes(user1['id']),
         get_bytes(user2['id'])
@@ -117,39 +135,32 @@ async def make_couple_img(user1, user2, context):
 
 # --- COMMAND ---
 async def couple_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("\n--- NEW COUPLE REQUEST ---")
-    chat = update.effective_chat
-    bot_id = context.bot.id if context.bot.id else 0
+    bot_id = context.bot.id
     
     msg = await update.message.reply_text("🔍 **Finding a perfect match...**", parse_mode=ParseMode.MARKDOWN)
 
     try:
-        if users_col is None:
-            await msg.edit_text("❌ DB Error: users_col is None")
-            return
-
-        print("🔍 [Step 1] Fetching Users from DB...")
+        # 🔥 Fetch Random Users
         pipeline = [
             {"$match": {"_id": {"$ne": bot_id}}}, 
             {"$sample": {"size": 2}}
         ]
         random_users = list(users_col.aggregate(pipeline))
         
+        # Fallback if DB is empty
         if len(random_users) < 2:
-            print("⚠️ Not enough users, using dummies.")
             u1 = {'_id': update.effective_user.id, 'name': update.effective_user.first_name}
-            u2 = {'_id': 0, 'name': 'Herobrine'}
+            u2 = {'_id': 0, 'name': 'No User'} # ID 0 means no PFP
         else:
             u1 = random_users[0]
             u2 = random_users[1]
         
-        user1_data = {'id': u1['_id'], 'first_name': u1.get('name', 'User1')}
-        user2_data = {'id': u2['_id'], 'first_name': u2.get('name', 'User2')}
+        # Prepare Data
+        user1_data = {'id': u1['_id'], 'first_name': u1.get('name', 'Lover 1')}
+        user2_data = {'id': u2['_id'], 'first_name': u2.get('name', 'Lover 2')}
 
-        # Generate
+        # Generate Image
         photo = await make_couple_img(user1_data, user2_data, context)
-        
-        print("📤 [Step 4] Sending Photo...")
         
         caption = f"""
 <blockquote><b>💘 {to_fancy("TODAY'S COUPLE")}</b></blockquote>
@@ -166,15 +177,17 @@ async def couple_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
         kb = [[InlineKeyboardButton("👨‍💻 Support", url="https://t.me/Dev_Digan")]]
         
-        await update.message.reply_photo(
-            photo=photo,
-            caption=caption,
-            reply_markup=InlineKeyboardMarkup(kb),
-            parse_mode=ParseMode.HTML
-        )
+        if photo:
+            await update.message.reply_photo(
+                photo=photo,
+                caption=caption,
+                reply_markup=InlineKeyboardMarkup(kb),
+                parse_mode=ParseMode.HTML
+            )
+        else:
+            await msg.edit_text("❌ Failed to generate image.")
+            
         await msg.delete()
-        print("✅ [Step 5] Done!\n")
 
     except Exception as e:
-        print(f"❌ CRITICAL ERROR: {e}")
-        await msg.edit_text(f"❌ Error: {str(e)}")
+        await msg.edit_text(f"❌ Error: {e}")
