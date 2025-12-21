@@ -42,7 +42,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass 
 
     # B. Send Emoji & Loading Bar
-    msg = await update.message.reply_text("⚡")
+    msg = await update.message.reply_text("🍭")
     await asyncio.sleep(0.5)
     
     # Loading Animation Loop
