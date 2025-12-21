@@ -83,12 +83,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 └────────────────────•
 ɪ ᴀᴍ ᴛʜᴇ ғᴀsᴛᴇsᴛ ᴀɴᴅ ᴘᴏᴡᴇʀғᴜʟ ᴇᴄᴏɴᴏᴍʏ & ᴀɪ ʙᴏᴛ ᴡɪᴛʜ sᴏᴍᴇ ᴀᴡᴇsᴏᴍᴇ ғᴇᴀᴛᴜʀᴇs.
 
-➥ᴜᴘᴛɪᴍᴇ: `{uptime}`
-➥sᴇʀᴠᴇʀ sᴛᴏʀᴀɢᴇ: `{disk}%`
-➥ᴄᴘᴜ ʟᴏᴀᴅ: `{cpu}%`
-➥ʀᴀᴍ ᴄᴏɴsᴜᴍᴘᴛɪᴏɴ: `{ram}%`
+> **⚙️ SYSTEM STATUS**
+> ➥ ᴜᴘᴛɪᴍᴇ: `{uptime}`
+> ➥ sᴇʀᴠᴇʀ sᴛᴏʀᴀɢᴇ: `{disk}%`
+> ➥ ᴄᴘᴜ ʟᴏᴀᴅ: `{cpu}%`
+> ➥ ʀᴀᴍ ᴄᴏɴsᴜᴍᴘᴛɪᴏɴ: `{ram}%`
+
 •──────────────────────•
-✦ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}"""
+✦ ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}
+"""
 
     # --- 3. AUTO REGISTRATION ---
     is_new_user = False
