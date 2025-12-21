@@ -11,6 +11,7 @@ from database import users_col, codes_col, update_balance, get_balance, check_re
 from ai_chat import get_yuki_response, get_mimi_sticker
 
 # MODULES
+# 🔥 Added 'logger' and 'events' imports
 import admin, start, help, group, leaderboard, pay, bank, bet, wordseek, grouptools, chatstat, logger, events
 
 # 🔥 Import Anti-Spam
@@ -102,17 +103,12 @@ async def shop_menu(update, context):
 # --- CALLBACK HANDLER ---
 async def callback_handler(update, context):
     q = update.callback_query
-    await q.answer()  # 🔥 MUST (very important)
-
     data = q.data
     uid = q.from_user.id
-
-    # 🔥 1. GLOBAL CLOSE BUTTONS (TOP PRIORITY)
-    if data.startswith("close_"):
-        try:
-            await q.message.delete()
-        except:
-            pass
+    
+    # 🔥 1. LOGGER CLOSE BUTTON (Ye Naya Hai)
+    if data == "close_log":
+        await q.message.delete()
         return
 
     # 2. ADMIN PANEL
@@ -125,41 +121,9 @@ async def callback_handler(update, context):
         await wordseek.wordseek_callback(update, context)
         return
 
-        # --- CALLBACK HANDLER ---
-async def callback_handler(update, context):
-    q = update.callback_query
-    await q.answer()
-    data = q.data
-    uid = q.from_user.id
-
-    # 🔥 START MENU BUTTONS (/start photo menu)
-    if data.startswith((
-        "help_main",
-        "help_market",
-        "help_games",
-        "help_shop",
-        "help_bank",
-        "help_admin",
-        "help_next",
-        "back_home",
-        "start_chat_ai"
-    )):
+    # 4. START MENU
+    if data.startswith(("help_", "start_chat_ai", "back_home")):
         await start.start_callback(update, context)
-        return
-
-    # 🔥 /help MENU BUTTONS
-    if data.startswith((
-        "help_bank",
-        "help_game",
-        "help_crime",
-        "help_market",
-        "help_shop",
-        "help_tools",
-        "help_admin",
-        "help_home",
-        "close_help"
-    )):
-        await help.help_callback(update, context)
         return
 
     # 5. BET LOGIC
