@@ -81,7 +81,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ┆◍ ʜєʏ, {user.first_name} 🥀
 ┆◍ ɪ ᴧϻ {bot_name}
 └────────────────────•
-ɪ ᴀᴍ ᴛʜᴇ ғᴀsᴛᴇsᴛ ᴀɴᴅ ᴘᴏᴡᴇʀғᴜʟ ᴇᴄᴏɴᴏᴍʏ & ᴀɪ ʙᴏᴛ ᴡɪᴛʜ sᴏᴍᴇ ᴀᴡᴇsᴏᴍᴇ ғᴇᴀᴛᴜʀᴇs.
+```ɪ ᴀᴍ ᴛʜᴇ ғᴀsᴛᴇsᴛ ᴀɴᴅ ᴘᴏᴡᴇʀғᴜʟ ᴇᴄᴏɴᴏᴍʏ & ᴀɪ ʙᴏᴛ ᴡɪᴛʜ sᴏᴍᴇ ᴀᴡᴇsᴏᴍᴇ ғᴇᴀᴛᴜʀᴇs.```
 
 ```text
 ╭─ ⚙️ SYSTEM STATUS
@@ -92,7 +92,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╰───────────────
 
 •──────────────────────• 
-```✦ ᴘᴏᴡєʀєᴅ ʙʏ »``` {owner_link} 
+✦ ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}
+ 
 """
 
     # --- 3. AUTO REGISTRATION ---
