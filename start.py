@@ -95,7 +95,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ```
 
 •──────────────────────•
+'''
 ✦ ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}
+```
 """
 
     # --- 3. AUTO REGISTRATION ---
