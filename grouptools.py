@@ -48,6 +48,41 @@ async def safe_delete(msg):
 
 
 # ─────────────────────────────
+# GET ID
+# ─────────────────────────────
+async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.delete()
+    except:
+        pass
+
+    chat = update.effective_chat
+    msg = update.message
+    reply = msg.reply_to_message
+
+    text = ""
+
+    if reply:
+        user = reply.from_user
+        text += f"👤 **User ID:** `{user.id}`\n"
+
+        if reply.forward_from:
+            text += f"⏩ **Forwarded User ID:** `{reply.forward_from.id}`\n"
+
+        if reply.forward_from_chat:
+            text += f"📢 **Forwarded Chat ID:** `{reply.forward_from_chat.id}`\n"
+
+        if reply.forward_sender_name and not reply.forward_from:
+            text += f"⏩ **Forwarded Sender:** {reply.forward_sender_name} (Hidden)\n"
+    else:
+        text += f"👤 **Your ID:** `{update.effective_user.id}`\n"
+
+    text += f"👥 **Group ID:** `{chat.id}`"
+
+    await chat.send_message(text, parse_mode=ParseMode.MARKDOWN)
+
+
+# ─────────────────────────────
 # WARN SYSTEM
 # ─────────────────────────────
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -281,6 +316,7 @@ async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         "🛡️ **Admin Commands (.prefix only)**\n\n"
+        ".id [reply] - Get IDs\n"
         ".warn [reply] - Warn a user (3 = ban)\n"
         ".unwarn [reply] - Remove 1 warning\n"
         ".mute [reply] - Mute user\n"
