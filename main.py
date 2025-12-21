@@ -12,7 +12,7 @@ from database import (
     users_col, codes_col, update_balance, get_balance, 
     check_registered, register_user, update_group_activity, 
     update_username, update_chat_stats,
-    is_user_muted, is_user_banned # 🔥 NEW IMPORTS FOR ENFORCEMENT
+    is_user_muted, is_user_banned
 )
 from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
@@ -38,18 +38,14 @@ SHOP_ITEMS = {
 }
 
 async def delete_job(context):
-    try:
-        await context.bot.delete_message(context.job.chat_id, context.job.data)
-    except:
-        pass
+    try: await context.bot.delete_message(context.job.chat_id, context.job.data)
+    except: pass
 
-# --- ECONOMY COMMANDS (Restored) ---
-
+# --- ECONOMY COMMANDS ---
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = update.effective_user
     if update.message.reply_to_message:
         target = update.message.reply_to_message.from_user
-    
     bal = get_balance(target.id)
     await update.message.reply_text(f"💳 **{target.first_name}'s Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN)
 
@@ -67,16 +63,14 @@ async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     code = context.args[0]
     data = codes_col.find_one({"code": code})
-    
     if not data: return await update.message.reply_text("❌ Invalid Code!")
     if user.id in data["redeemed_by"]: return await update.message.reply_text("⚠️ Already Redeemed!")
-    if len(data["redeemed_by"]) >= data["limit"]: return await update.message.reply_text("❌ Code Limit Reached!")
-
+    
     update_balance(user.id, data["amount"])
     codes_col.update_one({"code": code}, {"$push": {"redeemed_by": user.id}})
     await update.message.reply_text(f"🎉 Redeemed ₹{data['amount']}!")
 
-# --- CALLBACK HANDLER ---
+# --- CALLBACK HANDLER (FIXED) ---
 async def callback_handler(update, context):
     q = update.callback_query
     data = q.data
@@ -87,22 +81,24 @@ async def callback_handler(update, context):
         await q.message.delete()
         return
 
-    # 2. ADMIN PANEL
+    # 2. START & HELP (Merged Logic)
+    # st_ prefix means Start Menu, help_ prefix means Help Menu
+    if data.startswith(("start_", "st_", "back_home")):
+        await start.start_callback(update, context)
+        return
+        
+    if data.startswith("help_"):
+        await help.help_callback(update, context)
+        return
+
+    # 3. ADMIN PANEL
     if data.startswith("admin_"):
         await admin.admin_callback(update, context)
         return
 
-    # 3. WORD SEEK GAME
+    # 4. WORD SEEK GAME
     if data.startswith(("wrank_", "new_wordseek_", "close_wrank", "end_wordseek")):
         await wordseek.wordseek_callback(update, context)
-        return
-
-    # 4. HELP & START MENU
-    if data.startswith("help_"):
-        await help.help_callback(update, context)
-        return
-    if data.startswith(("start_chat_ai", "back_home")):
-        await start.start_callback(update, context)
         return
 
     # 5. CHAT STATS & RANKING
@@ -117,16 +113,14 @@ async def callback_handler(update, context):
 
     # 7. REGISTRATION & SHOP
     if data.startswith("reg_start_"):
-        target_id = int(data.split("_")[2])
-        if uid != target_id: return await q.answer("Not for you!", show_alert=True)
+        if uid != int(data.split("_")[2]): return await q.answer("Not for you!", show_alert=True)
         if register_user(uid, q.from_user.first_name): await q.edit_message_text("✅ Registered!")
         else: await q.answer("Already registered!")
         return
 
     if data.startswith("buy_"):
         parts = data.split("_")
-        target_id = int(parts[2])
-        if uid != target_id: return await q.answer("Not for you!", show_alert=True)
+        if uid != int(parts[2]): return await q.answer("Not for you!", show_alert=True)
         item = SHOP_ITEMS.get(parts[1])
         if get_balance(uid) < item["price"]: return await q.answer("No Money!", show_alert=True)
         update_balance(uid, -item["price"])
@@ -135,30 +129,23 @@ async def callback_handler(update, context):
         await q.message.delete()
         return
     
-    # 8. REVIVE (From pay.py)
+    # 8. REVIVE
     if data.startswith("revive_"):
         await pay.revive_callback(update, context)
         return
 
-# --- MESSAGE HANDLER (ENFORCEMENT, AI & VOICE) ---
+# --- MESSAGE HANDLER (ENFORCEMENT & AI) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     user = update.effective_user
     chat = update.effective_chat
     
-    # 🚨 1. ENFORCEMENT (BAN & MUTE CHECK) 🚨
+    # 🚨 1. ENFORCEMENT (BAN & MUTE)
     if chat.type in ["group", "supergroup"] and not user.is_bot:
-        # Check if Banned
-        if is_user_banned(chat.id, user.id):
+        if is_user_banned(chat.id, user.id) or is_user_muted(chat.id, user.id):
             try: await update.message.delete()
             except: pass
-            return # Stop processing
-            
-        # Check if Muted
-        if is_user_muted(chat.id, user.id):
-            try: await update.message.delete()
-            except: pass
-            return # Stop processing
+            return
 
     # 2. ANTI-SPAM
     if not user.is_bot:
@@ -195,7 +182,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id: should_reply = True
 
     if should_reply:
-        voice_triggers = ["voice", "audio", "bol", "bolo", "speak", "suna", "rec", "batao"]
+        # Check if user wants Voice
+        voice_triggers = ["voice", "audio", "bol", "bolo", "speak", "suna", "rec", "batao", "sunao"]
         wants_voice = any(v in text.lower() for v in voice_triggers)
 
         await context.bot.send_chat_action(chat_id=chat.id, action="typing")
@@ -203,15 +191,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if wants_voice:
             await context.bot.send_chat_action(chat_id=chat.id, action="record_voice")
+            # Generate Voice
             audio_path = generate_voice(ai_reply)
+            
             if audio_path:
                 try:
-                    await update.message.reply_voice(voice=open(audio_path, 'rb'), caption=f"🗣 **Mimi:** {ai_reply}")
-                    os.remove(audio_path)
+                    with open(audio_path, 'rb') as voice_file:
+                        await update.message.reply_voice(voice=voice_file, caption=f"🗣 **Mimi:** {ai_reply}")
+                    os.remove(audio_path) # Delete file after sending
                     return
-                except: pass
-        
-        await update.message.reply_text(ai_reply)
+                except Exception as e:
+                    print(f"Voice Send Error: {e}")
+                    # Fallback to text if voice fails
+                    await update.message.reply_text(ai_reply)
+            else:
+                # TTS Failed (No keys or error)
+                await update.message.reply_text(ai_reply)
+        else:
+            # Normal Text Reply
+            await update.message.reply_text(ai_reply)
 
 # --- MAIN ENGINE ---
 def main():
@@ -223,7 +221,7 @@ def main():
     app.add_handler(CommandHandler("help", help.help_command))
     app.add_handler(CommandHandler("admin", admin.admin_panel))
     
-    # Economy Commands (Restored)
+    # Economy
     app.add_handler(CommandHandler("bal", balance_cmd))
     app.add_handler(CommandHandler("redeem", redeem_code))
     app.add_handler(CommandHandler("shop", shop_menu))
@@ -234,9 +232,15 @@ def main():
     app.add_handler(CommandHandler("stats", logger.stats_bot))
     app.add_handler(CommandHandler("ping", logger.ping_bot))
     
-    # Games & Economy Modules
+    # Games & Market (Invest/TopInvest)
     app.add_handler(CommandHandler("bet", bet.bet_menu))
     app.add_handler(CommandHandler("new", wordseek.start_wordseek))
+    app.add_handler(CommandHandler("market", group.market_info))
+    app.add_handler(CommandHandler("invest", group.invest))
+    app.add_handler(CommandHandler("sell", group.sell_shares))
+    app.add_handler(CommandHandler("topinvest", group.top_investors)) # 🔥 Added
+    
+    # Banking
     app.add_handler(CommandHandler("bank", bank.bank_info))
     app.add_handler(CommandHandler("deposit", bank.deposit))
     app.add_handler(CommandHandler("withdraw", bank.withdraw))
@@ -249,7 +253,6 @@ def main():
     app.add_handler(CommandHandler("kill", pay.kill_user))
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
-    app.add_handler(CommandHandler("topinvest", group.top_investors))
 
     # Callback Handlers
     app.add_handler(CallbackQueryHandler(callback_handler))
