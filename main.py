@@ -18,7 +18,11 @@ from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
 # MODULES
-import admin, start, help, group, leaderboard, pay, bank, bet, wordseek, grouptools, chatstat, logger, events
+import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events
+
+# 🔥 Bank Updated Import (check_balance added)
+import bank 
+from bank import check_balance 
 
 # 🔥 Import Anti-Spam
 from antispam import check_spam
@@ -41,21 +45,22 @@ async def delete_job(context):
     try: await context.bot.delete_message(context.job.chat_id, context.job.data)
     except: pass
 
-# --- ECONOMY COMMANDS ---
-async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    target = update.effective_user
-    if update.message.reply_to_message:
-        target = update.message.reply_to_message.from_user
-    bal = get_balance(target.id)
-    await update.message.reply_text(f"💳 **{target.first_name}'s Balance:** ₹{bal}", parse_mode=ParseMode.MARKDOWN)
-
+# --- SHOP MENU (Local) ---
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+    # Agar callback se call hua hai to user id nikalo
+    if update.callback_query:
+        uid = update.callback_query.from_user.id
+        msg_func = update.callback_query.message.reply_text
+    else:
+        uid = update.effective_user.id
+        msg_func = update.message.reply_text
+
     kb = []
     for k, v in SHOP_ITEMS.items():
         kb.append([InlineKeyboardButton(f"{v['name']} - ₹{v['price']}", callback_data=f"buy_{k}_{uid}")])
     kb.append([InlineKeyboardButton("❌ Close", callback_data=f"close_help")])
-    await update.message.reply_text("🛒 **VIP SHOP**", reply_markup=InlineKeyboardMarkup(kb))
+    
+    await msg_func("🛒 **VIP SHOP**\nBuy special titles here:", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
 async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -70,7 +75,7 @@ async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     codes_col.update_one({"code": code}, {"$push": {"redeemed_by": user.id}})
     await update.message.reply_text(f"🎉 Redeemed ₹{data['amount']}!")
 
-# --- CALLBACK HANDLER (FIXED FOR BUTTONS) ---
+# --- CALLBACK HANDLER (FIXED FOR START/HELP BUTTONS) ---
 async def callback_handler(update, context):
     q = update.callback_query
     data = q.data
@@ -78,39 +83,58 @@ async def callback_handler(update, context):
     
     # 1. UI CLOSE ACTIONS
     if data in ["close_log", "close_ping", "close_help"]:
-        await q.message.delete()
+        try: await q.message.delete()
+        except: pass
         return
 
-    # 2. START & HELP (Merged Logic for st_ and help_)
+    # 2. START BUTTONS FIX (Redirects)
+    # Agar Start menu ke buttons aise data bhej rahe hain:
+    if data == "open_shop":
+        await shop_menu(update, context)
+        return
+    
+    if data == "open_games":
+        await bet.bet_menu(update, context) # Games button seedha Bet menu kholega
+        return
+
+    if data == "open_ranking":
+        await leaderboard.user_leaderboard(update, context)
+        return
+
+    if data == "open_commands":
+        await help.help_callback(update, context) # Redirect to Help
+        return
+
+    # 3. START & HELP MODULES
     if data.startswith(("start_", "st_", "back_home")):
         await start.start_callback(update, context)
         return
         
-    if data.startswith("help_"):
+    if data.startswith(("help_", "mod_")): # Added 'mod_' just in case
         await help.help_callback(update, context)
         return
 
-    # 3. ADMIN PANEL
+    # 4. ADMIN PANEL
     if data.startswith("admin_"):
         await admin.admin_callback(update, context)
         return
 
-    # 4. WORD SEEK GAME
+    # 5. WORD SEEK GAME
     if data.startswith(("wrank_", "new_wordseek_", "close_wrank", "end_wordseek")):
         await wordseek.wordseek_callback(update, context)
         return
 
-    # 5. CHAT STATS & RANKING
+    # 6. CHAT STATS & RANKING
     if data.startswith(("rank_", "hide_rank")):
         await chatstat.rank_callback(update, context)
         return
         
-    # 6. BET & GAMES
+    # 7. BET & GAMES
     if data.startswith(("set_", "clk_", "cash_", "close_", "noop_", "rebet_")):
         await bet.bet_callback(update, context)
         return
 
-    # 7. REGISTRATION & SHOP
+    # 8. REGISTRATION & SHOP BUYING
     if data.startswith("reg_start_"):
         if uid != int(data.split("_")[2]): return await q.answer("Not for you!", show_alert=True)
         if register_user(uid, q.from_user.first_name): await q.edit_message_text("✅ Registered!")
@@ -128,12 +152,12 @@ async def callback_handler(update, context):
         await q.message.delete()
         return
     
-    # 8. REVIVE
+    # 9. REVIVE
     if data.startswith("revive_"):
         await pay.revive_callback(update, context)
         return
 
-# --- MESSAGE HANDLER (VOICE FIXED) ---
+# --- MESSAGE HANDLER ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     user = update.effective_user
@@ -171,7 +195,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if sticker_id: await update.message.reply_sticker(sticker_id)
         return
 
-        # 6. TEXT & VOICE AI (Updated)
+    # 6. TEXT & VOICE AI
     text = update.message.text
     if not text: return
 
@@ -181,7 +205,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id: should_reply = True
 
     if should_reply:
-        # Check if user wants Voice
         voice_triggers = ["voice", "audio", "bol", "bolo", "speak", "suna", "rec", "batao", "sunao", "kaho"]
         wants_voice = any(v in text.lower() for v in voice_triggers)
 
@@ -190,14 +213,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if wants_voice:
             await context.bot.send_chat_action(chat_id=chat.id, action="record_voice")
-            
-            # Generate Voice
             audio_path = await generate_voice(ai_reply)
             
             if audio_path:
                 try:
                     with open(audio_path, 'rb') as voice_file:
-                        # 🔥 CHANGE: Caption hata diya hai
                         await update.message.reply_voice(voice=voice_file)
                     os.remove(audio_path)
                     return
@@ -219,8 +239,8 @@ def main():
     app.add_handler(CommandHandler("help", help.help_command))
     app.add_handler(CommandHandler("admin", admin.admin_panel))
     
-    # Economy
-    app.add_handler(CommandHandler("bal", balance_cmd))
+    # 🔥 Economy (Use check_balance for /bal)
+    app.add_handler(CommandHandler("bal", check_balance)) # Updated to new Stylish Bank Balance
     app.add_handler(CommandHandler("redeem", redeem_code))
     app.add_handler(CommandHandler("shop", shop_menu))
     
