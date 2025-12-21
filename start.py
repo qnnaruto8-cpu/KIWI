@@ -77,23 +77,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Owner Link
     owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
 
-    caption = caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
+    caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
 ┆◍ ʜєʏ, {user.first_name} 🥀
 ┆◍ ɪ ᴧϻ {bot_name}
 └────────────────────•
-```ɪ ᴀᴍ ᴛʜᴇ ғᴀsᴛᴇsᴛ ᴀɴᴅ ᴘᴏᴡᴇʀғᴜʟ ᴇᴄᴏɴᴏᴍʏ & ᴀɪ ʙᴏᴛ ᴡɪᴛʜ sᴏᴍᴇ ᴀᴡᴇsᴏᴍᴇ ғᴇᴀᴛᴜʀᴇs.```
+```
+ɪ ᴀᴍ ᴛʜᴇ ғᴀsᴛᴇsᴛ ᴀɴᴅ ᴘᴏᴡᴇʀғᴜʟ ᴇᴄᴏɴᴏᴍʏ & ᴀɪ ʙᴏᴛ ᴡɪᴛʜ sᴏᴍᴇ ᴀᴡᴇsᴏᴍᴇ ғᴇᴀᴛᴜʀᴇs.
+```
 
-```text
+```
 ╭─ ⚙️ SYSTEM STATUS
 │ ➥ UPTIME: {uptime}
 │ ➥ SERVER STORAGE: {disk:.1f}%
 │ ➥ CPU LOAD: {cpu:.1f}%
 │ ➥ RAM CONSUMPTION: {ram:.1f}%
 ╰───────────────
+```
 
-•──────────────────────• 
+•──────────────────────•
 ✦ ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}
- 
 """
 
     # --- 3. AUTO REGISTRATION ---
@@ -245,7 +247,7 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("💬 AI Mode Active!", show_alert=False)
         await q.message.reply_text(f"Hey **{user.first_name}**! 👋\nBas **'Hi Yuki'** ya **'Hello'** likho, main turant reply karungi!")
 
-        # 4. BACK HOME
+    # 4. BACK HOME
     elif data == "back_home":
         owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
         try:
