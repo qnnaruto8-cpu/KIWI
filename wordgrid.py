@@ -1,13 +1,14 @@
-
 import random
 import string
 import io
 import html
+import time
+import asyncio
 from PIL import Image, ImageDraw, ImageFont
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import ContextTypes
-import telegram  # Import added for InputMediaPhoto
+from telegram.ext import ContextTypes, JobQueue
+import telegram
 
 # --- WORD DATABASE ---
 WORDS_POOL = [
@@ -19,11 +20,13 @@ WORDS_POOL = [
 
 # --- GAME STORAGE ---
 active_games = {}
+game_timeouts = {}
 
 # --- SETTINGS ---
 GRID_SIZE = 8
 CELL_SIZE = 60
 FONT_PATH = "arial.ttf"
+GAME_TIMEOUT = 300  # 5 minutes in seconds
 
 # Fancy Text Converter
 def to_fancy(text):
@@ -146,9 +149,62 @@ def draw_grid_image(grid, found_words=None, word_positions=None):
     bio.seek(0)
     return bio
 
-# --- 3. START COMMAND ---
+# --- 3. AUTO-END GAME FUNCTION ---
+async def auto_end_game(context: ContextTypes.DEFAULT_TYPE):
+    chat_id = context.job.chat_id
+    
+    if chat_id in active_games:
+        game = active_games[chat_id]
+        
+        # Unpin the message
+        if game.get('message_pinned'):
+            try:
+                await context.bot.unpin_chat_message(chat_id=chat_id, message_id=game.get('msg_id'))
+            except:
+                pass
+        
+        # Edit message to show timeout
+        try:
+            await context.bot.edit_message_caption(
+                chat_id=chat_id,
+                message_id=game.get('msg_id'),
+                caption=f"""
+<blockquote><b>⏰ {to_fancy("TIME'S UP")}!</b></blockquote>
+
+<blockquote>
+Game ended due to inactivity (5 minutes)
+</blockquote>
+
+<blockquote>
+<b>Words were:</b> {', '.join(game['targets'])}
+<b>Found:</b> {len(game['found'])}/{len(game['targets'])}
+</blockquote>
+""",
+                parse_mode=ParseMode.HTML
+            )
+        except:
+            pass
+        
+        # Clean up
+        if chat_id in active_games:
+            del active_games[chat_id]
+        if chat_id in game_timeouts:
+            del game_timeouts[chat_id]
+
+# --- 4. START COMMAND ---
 async def start_wordgrid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    
+    # Check if game already running in this chat
+    if chat_id in active_games:
+        await update.message.reply_text(
+            f"⚠️ <b>A Word Grid game is already running in this chat!</b>\n"
+            f"Complete it or use the 'Give Up' button first.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+    
+    # Generate new game
     grid, targets, word_positions = generate_grid()
     photo = draw_grid_image(grid, [], word_positions)
     hints = {word: create_hint(word) for word in targets}
@@ -159,7 +215,9 @@ async def start_wordgrid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'hints': hints, 
         'found': [],
         'word_positions': word_positions,
-        'message_pinned': False
+        'message_pinned': False,
+        'start_time': time.time(),
+        'created_by': update.effective_user.id
     }
     
     word_list_text = "\n".join([f"▫️ <code>{hints[w]}</code>" for w in targets])
@@ -175,6 +233,7 @@ async def start_wordgrid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <b>👇 Type the FULL word to solve!</b>
 <b>👨‍💻 Dev:</b> Digan
 <b>🎯 Found: 0/{len(targets)} words</b>
+<b>⏰ Auto-ends in 5 minutes</b>
 </blockquote>
 """
     kb = [[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]]
@@ -195,31 +254,38 @@ async def start_wordgrid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         active_games[chat_id]['message_pinned'] = True
     except Exception as e:
         print(f"Could not pin message: {e}")
+    
+    # Schedule auto-end job
+    if context.job_queue:
+        job = context.job_queue.run_once(
+            auto_end_game,
+            when=GAME_TIMEOUT,
+            chat_id=chat_id,
+            name=f"wordgrid_timeout_{chat_id}"
+        )
+        game_timeouts[chat_id] = job
 
-# --- 4. HANDLE GUESS ---
+# --- 5. HANDLE GUESS ---
 async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: 
         return
     
     chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-    text = update.message.text.upper().strip()
     
-    print(f"DEBUG: User {user_id} in chat {chat_id} guessed: {text}")
-    print(f"DEBUG: Active games: {list(active_games.keys())}")
-    
+    # Check if there's an active game
     if chat_id not in active_games:
-        print(f"DEBUG: No active game in chat {chat_id}")
         return
     
     game = active_games[chat_id]
+    text = update.message.text.upper().strip()
+    
+    # Debug print
+    print(f"DEBUG: User guessed: '{text}' in chat {chat_id}")
     print(f"DEBUG: Game targets: {game['targets']}")
-    print(f"DEBUG: Already found: {game['found']}")
     
     # Check if word is valid
     if text not in game['targets']:
-        print(f"DEBUG: {text} is not in targets")
-        # Not a valid word - you can optionally add a reaction
+        # Not a valid word
         try:
             await update.message.set_reaction("❌")
         except:
@@ -227,23 +293,34 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if text in game['found']:
-        print(f"DEBUG: {text} already found")
-        # Word already found - add reaction
+        # Word already found
         try:
             await update.message.set_reaction("⚠️")
         except:
             pass
         return
     
-    print(f"DEBUG: Found new word: {text}")
-    
-    # Add word to found list
+    # Valid new word found!
     game['found'].append(text)
     
-    # Update image with found word highlighted
+    # Reset timeout when word is found
+    if chat_id in game_timeouts and context.job_queue:
+        # Remove old timeout
+        old_job = game_timeouts[chat_id]
+        old_job.schedule_removal()
+        # Schedule new timeout
+        job = context.job_queue.run_once(
+            auto_end_game,
+            when=GAME_TIMEOUT,
+            chat_id=chat_id,
+            name=f"wordgrid_timeout_{chat_id}"
+        )
+        game_timeouts[chat_id] = job
+    
+    # Update image
     photo = draw_grid_image(game['grid'], game['found'], game['word_positions'])
     
-    # Update the game message
+    # Update caption
     new_list = []
     for w in game['targets']:
         if w in game['found']:
@@ -265,11 +342,12 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <b>👇 Type the FULL word to solve!</b>
 <b>👨‍💻 Dev:</b> Digan
 <b>🎯 Found: {progress}/{total} words</b>
+<b>⏰ Auto-ends in 5 minutes</b>
 </blockquote>
 """
     
     try:
-        # Update the image
+        # Update image
         media = telegram.InputMediaPhoto(media=photo)
         await context.bot.edit_message_media(
             chat_id=chat_id,
@@ -277,7 +355,7 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
             media=media
         )
         
-        # Update the caption
+        # Update caption
         await context.bot.edit_message_caption(
             chat_id=chat_id,
             message_id=game['msg_id'],
@@ -286,49 +364,46 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]])
         )
         
-        # Add reaction to user's message
+        # Add reaction
         try:
             await update.message.set_reaction("✅")
         except:
             pass
         
-        print(f"DEBUG: Successfully updated game for word: {text}")
+        print(f"DEBUG: Successfully found word: {text}")
         
     except Exception as e:
-        print(f"DEBUG: Error updating game: {str(e)}")
-        # Try to send a new message if edit fails
-        try:
-            msg = await update.message.reply_photo(
-                photo=photo,
-                caption=caption,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏳️ Give Up", callback_data="giveup_wordgrid")]]),
-                parse_mode=ParseMode.HTML
-            )
-            active_games[chat_id]['msg_id'] = msg.message_id
-            print(f"DEBUG: Sent new message with ID: {msg.message_id}")
-        except Exception as e2:
-            print(f"DEBUG: Failed to send new message: {str(e2)}")
+        print(f"DEBUG: Error updating: {str(e)}")
     
     # Check if game is complete
     if len(game['found']) == len(game['targets']):
         print(f"DEBUG: Game completed!")
-        # Game complete - unpin message and clean up
+        
+        # Cancel timeout job
+        if chat_id in game_timeouts:
+            job = game_timeouts[chat_id]
+            job.schedule_removal()
+            del game_timeouts[chat_id]
+        
+        # Unpin message
         if game.get('message_pinned'):
             try:
                 await context.bot.unpin_chat_message(chat_id=chat_id, message_id=game['msg_id'])
             except:
                 pass
         
+        # Send completion message
         final_caption = f"""
 <blockquote><b>🏆 {to_fancy("GAME COMPLETE")}!</b></blockquote>
 
 <blockquote>
-✅ All words found!
+✅ All {total} words found!
 🎉 Congratulations @{update.effective_user.username if update.effective_user.username else update.effective_user.first_name}!
+⏱️ Time: {(time.time() - game['start_time']):.1f}s
 </blockquote>
 
 <blockquote>
-<b>Words were:</b> {', '.join(game['targets'])}
+<b>Words:</b> {', '.join(game['targets'])}
 <b>👨‍💻 Dev:</b> Digan
 </blockquote>
 """
@@ -338,10 +413,10 @@ async def handle_word_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
         
-        # Remove game from active games
+        # Clean up
         del active_games[chat_id]
 
-# --- 5. GIVE UP ---
+# --- 6. GIVE UP ---
 async def give_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -351,13 +426,20 @@ async def give_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game = active_games[chat_id]
         targets = game['targets']
         
-        # Unpin the message
+        # Cancel timeout job
+        if chat_id in game_timeouts:
+            job = game_timeouts[chat_id]
+            job.schedule_removal()
+            del game_timeouts[chat_id]
+        
+        # Unpin message
         if game.get('message_pinned'):
             try:
                 await context.bot.unpin_chat_message(chat_id=chat_id, message_id=game['msg_id'])
             except:
                 pass
         
+        # Remove game
         del active_games[chat_id]
         
         await query.message.edit_caption(
@@ -365,11 +447,13 @@ async def give_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <blockquote><b>❌ {to_fancy("GAME OVER")}</b></blockquote>
 
 <blockquote>
-🏳️ You gave up!
+🏳️ Game ended by user
+⏱️ Time played: {(time.time() - game['start_time']):.1f}s
 </blockquote>
 
 <blockquote>
 <b>Words were:</b> {', '.join(targets)}
+<b>Found:</b> {len(game['found'])}/{len(targets)}
 </blockquote>
 """,
             parse_mode=ParseMode.HTML
@@ -377,19 +461,35 @@ async def give_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.answer("No active game.", show_alert=True)
 
-# --- 6. CALLBACK HANDLER (for give up) ---
+# --- 7. CALLBACK HANDLER ---
 async def grid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This function handles any grid-related callbacks
     query = update.callback_query
     data = query.data
     
     if data == "giveup_wordgrid":
         await give_up(update, context)
 
-# Export functions for main.py
+# --- 8. CLEANUP FUNCTION (Optional) ---
+def cleanup_old_games():
+    """Clean up games older than timeout + buffer"""
+    current_time = time.time()
+    chats_to_remove = []
+    
+    for chat_id, game in active_games.items():
+        if current_time - game['start_time'] > GAME_TIMEOUT + 60:  # 6 minutes
+            chats_to_remove.append(chat_id)
+    
+    for chat_id in chats_to_remove:
+        if chat_id in active_games:
+            del active_games[chat_id]
+        if chat_id in game_timeouts:
+            del game_timeouts[chat_id]
+
+# Export functions
 __all__ = [
     'start_wordgrid',
     'handle_word_guess',
     'grid_callback',
-    'give_up'
+    'give_up',
+    'cleanup_old_games'
 ]
