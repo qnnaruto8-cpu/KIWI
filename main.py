@@ -20,6 +20,9 @@ from tts import generate_voice
 # MODULES
 import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
 
+# Add this to your imports
+import livetime  # <-- Add this
+
 # 🔥 Import New DM Spam Module
 import dmspam 
 
@@ -338,7 +341,10 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_STARTED, events.vc_handler))
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_ENDED, events.vc_handler))
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_PARTICIPANTS_INVITED, events.vc_handler))
-    
+
+    # Add this to your command handlers section
+app.add_handler(CommandHandler("time", livetime.start_live_time))
+app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
     # Group Admin Tools
