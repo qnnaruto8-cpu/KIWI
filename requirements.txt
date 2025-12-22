@@ -8,6 +8,6 @@ pytz
 edge-tts
 Pillow
 yt-dlp
-pyrogram
 tgcrypto
-py-tgcalls
+pyrogram==2.0.106
+py-tgcalls==1.1.0
