@@ -20,9 +20,8 @@ from tts import generate_voice
 # MODULES
 import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
 
-# 🔥 Import New Modules
+# 🔥 Import New DM Spam Module
 import dmspam 
-import wordgrid # <--- Naya Word Grid Module
 
 # 🔥 Bank Updated Import
 import bank 
@@ -51,6 +50,7 @@ async def delete_job(context):
 
 # --- SHOP MENU ---
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Logic to handle both Command and Button Click
     if update.callback_query:
         uid = update.callback_query.from_user.id
         msg_func = update.callback_query.message.edit_text 
@@ -84,11 +84,13 @@ async def callback_handler(update, context):
     data = q.data
     uid = q.from_user.id
     
+    # 1. UI CLOSE ACTIONS
     if data in ["close_log", "close_ping", "close_help"]:
         try: await q.message.delete()
         except: pass
         return
 
+    # 2. START MENU BUTTONS
     if data == "open_shop":
         await q.answer()
         await shop_menu(update, context)
@@ -97,7 +99,7 @@ async def callback_handler(update, context):
     if data == "open_games":
         await q.answer()
         kb = [[InlineKeyboardButton("🔙 Back", callback_data="back_home")]]
-        msg = "🎮 **GAME MENU**\n\n🎲 `/bet` - Bomb Game\n🔠 `/new` - Word Seek\n🧩 `/wordgrid` - Word Search\n❌ `/zero` - Tic Tac Toe"
+        msg = "🎮 **GAME MENU**\n\n🎲 `/bet` - Bomb Game\n🔠 `/new` - Word Seek\n❌ `/zero` - Tic Tac Toe\n💰 `/invest` - Stock Market"
         await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
         return
 
@@ -116,11 +118,7 @@ async def callback_handler(update, context):
         await start.start_callback(update, context)
         return
 
-    # 🎮 Word Grid Callback
-    if data == "giveup_wordgrid":
-        await wordgrid.give_up(update, context)
-        return
-
+    # 3. HELP MODULES
     if data.startswith(("help_", "mod_")): 
         await help.help_callback(update, context)
         return
@@ -129,26 +127,32 @@ async def callback_handler(update, context):
         await start.start_callback(update, context)
         return
 
+    # 4. ADMIN PANEL
     if data.startswith("admin_"):
         await admin.admin_callback(update, context)
         return
 
+    # 5. WORD SEEK GAME
     if data.startswith(("wrank_", "new_wordseek_", "close_wrank", "end_wordseek")):
         await wordseek.wordseek_callback(update, context)
         return
 
+    # 6. CHAT STATS
     if data.startswith(("rank_", "hide_rank")):
         await chatstat.rank_callback(update, context)
         return
         
+    # 7. BET & GAMES
     if data.startswith(("set_", "clk_", "cash_", "close_", "noop_", "rebet_")):
         await bet.bet_callback(update, context)
         return
 
+    # 8. TIC TAC TOE (ZERO CUTS)
     if data.startswith("ttt_"):
         await tictactoe.ttt_callback(update, context)
         return
 
+    # 9. REGISTRATION & SHOP BUYING
     if data.startswith("reg_start_"):
         if uid != int(data.split("_")[2]): return await q.answer("Not for you!", show_alert=True)
         if register_user(uid, q.from_user.first_name): await q.edit_message_text("✅ Registered!")
@@ -165,6 +169,7 @@ async def callback_handler(update, context):
         await q.answer(f"Bought {item['name']}!")
         return
     
+    # 10. REVIVE
     if data.startswith("revive_"):
         await pay.revive_callback(update, context)
         return
@@ -175,24 +180,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
     
-    # 🔥 0. DM SPAM PROTECTION
+    # 🔥 0. DM/STICKER SPAM PROTECTION (Strict Mode)
+    # Ye check sabse pehle hoga. 
     if chat.type == "private":
         spam_status = dmspam.check_spam(user.id)
+        
         if spam_status == "BLOCKED":
+            # Console me print karega taaki aapko pata chale
             print(f"🚫 Ignoring Spam from {user.first_name}") 
-            return 
+            return # Ignore user completely (No reply)
+            
         elif spam_status == "NEW_BLOCK":
             await update.message.reply_text("🚫 **Spam mat kar bhai!**\n5 minute ke liye block kiya ja raha hai.")
-            return
+            return # Block message bhej ke return
 
-    # 1. ENFORCEMENT
+    # 1. ENFORCEMENT (Group Bans/Mutes)
     if chat.type in ["group", "supergroup"] and not user.is_bot:
         if is_user_banned(chat.id, user.id) or is_user_muted(chat.id, user.id):
             try: await update.message.delete()
             except: pass
             return
 
-    # 2. ANTI-SPAM
+    # 2. GLOBAL ANTI-SPAM (Old logic, keep if needed for groups)
     if not user.is_bot:
         status = check_spam(user.id)
         if status == "BLOCKED":
@@ -206,19 +215,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update_chat_stats(chat.id, user.id, user.first_name)
         update_group_activity(chat.id, chat.title)
 
-    # 🔥 4. GAME & ADMIN LOGIC (Word Grid Yahan hai)
-    await wordgrid.handle_word_guess(update, context) # <--- Word Grid Guess
+    # 4. ADMIN & WORD GUESS
     if await admin.handle_admin_input(update, context): return
     await wordseek.handle_word_guess(update, context)
 
-    # 5. STICKER
+    # 5. STICKER REPLY
     if update.message.sticker:
+        # 20% Chance to reply sticker in Group OR Always in Private (unless handled by AI)
         if chat.type == "private" or (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id) or random.random() < 0.2:
             sticker_id = await get_mimi_sticker(context.bot)
             if sticker_id: await update.message.reply_sticker(sticker_id)
         return
 
-    # 6. TEXT AI
+    # 6. TEXT & VOICE AI
     text = update.message.text
     if not text: return
 
@@ -230,69 +239,101 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if should_reply:
         voice_triggers = ["voice", "audio", "bol", "bolo", "speak", "suna", "rec", "batao", "sunao", "kaho"]
         wants_voice = any(v in text.lower() for v in voice_triggers)
+
         await context.bot.send_chat_action(chat_id=chat.id, action="typing")
         ai_reply = get_yuki_response(user.id, text, user.first_name)
+
         if wants_voice:
             await context.bot.send_chat_action(chat_id=chat.id, action="record_voice")
             audio_path = await generate_voice(ai_reply)
+            
             if audio_path:
                 try:
                     with open(audio_path, 'rb') as voice_file:
                         await update.message.reply_voice(voice=voice_file)
                     os.remove(audio_path)
                     return
-                except: await update.message.reply_text(ai_reply)
-            else: await update.message.reply_text(ai_reply)
-        else: await update.message.reply_text(ai_reply)
+                except Exception as e:
+                    print(f"Voice Send Error: {e}")
+                    await update.message.reply_text(ai_reply)
+            else:
+                await update.message.reply_text(ai_reply)
+        else:
+            await update.message.reply_text(ai_reply)
 
 # --- MAIN ENGINE ---
 def main():
     keep_alive()
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     
+    # Core Commands
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("help", help.help_command))
     app.add_handler(CommandHandler("admin", admin.admin_panel))
     
-    # Fun
+    # User Info & Fun
     app.add_handler(CommandHandler("info", info.user_info))
     app.add_handler(CommandHandler("love", info.love_calculator))
     app.add_handler(CommandHandler("stupid", info.stupid_meter))
     app.add_handler(CommandHandler("couple", couple.couple_check))
     
-    # Games
-    app.add_handler(CommandHandler("wordgrid", wordgrid.start_wordgrid)) # <--- Command Add Kiya
-    app.add_handler(CommandHandler("bet", bet.bet_menu))
-    app.add_handler(CommandHandler("new", wordseek.start_wordseek))
-    app.add_handler(CommandHandler("zero", tictactoe.start_ttt))
-    
     # Economy
     app.add_handler(CommandHandler("bal", check_balance))
     app.add_handler(CommandHandler("redeem", redeem_code))
     app.add_handler(CommandHandler("shop", shop_menu))
+    
+    # Leaderboard & Stats
+    app.add_handler(CommandHandler("top", leaderboard.user_leaderboard))
+    app.add_handler(CommandHandler("ranking", group.ranking))
+    app.add_handler(CommandHandler("stats", logger.stats_bot))
+    app.add_handler(CommandHandler("ping", logger.ping_bot))
+    
+    # Games & Market
+    app.add_handler(CommandHandler("bet", bet.bet_menu))
+    app.add_handler(CommandHandler("new", wordseek.start_wordseek))
+    app.add_handler(CommandHandler("zero", tictactoe.start_ttt))
+    app.add_handler(CommandHandler("market", group.market_info))
+    app.add_handler(CommandHandler("invest", group.invest))
+    app.add_handler(CommandHandler("sell", group.sell_shares))
+    app.add_handler(CommandHandler("topinvest", group.top_investors))
+    
+    # Banking
     app.add_handler(CommandHandler("bank", bank.bank_info))
     app.add_handler(CommandHandler("deposit", bank.deposit))
     app.add_handler(CommandHandler("withdraw", bank.withdraw))
+    app.add_handler(CommandHandler("loan", bank.take_loan))
+    app.add_handler(CommandHandler("payloan", bank.repay_loan))
     
-    # Stats & RPG
-    app.add_handler(CommandHandler("top", leaderboard.user_leaderboard))
-    app.add_handler(CommandHandler("stats", logger.stats_bot))
-    app.add_handler(CommandHandler("ping", logger.ping_bot))
+    # Pay & RPG
     app.add_handler(CommandHandler("pay", pay.pay_user))
     app.add_handler(CommandHandler("rob", pay.rob_user))
     app.add_handler(CommandHandler("kill", pay.kill_user))
+    app.add_handler(CommandHandler("protect", pay.protect_user))
+    app.add_handler(CommandHandler("alive", pay.check_status))
 
+    # Callback Handlers
     app.add_handler(CallbackQueryHandler(callback_handler))
     
+    # Event Handlers (Join/Leave/VC)
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, events.welcome_user))
     app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, events.track_leave))
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_STARTED, events.vc_handler))
+    app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_ENDED, events.vc_handler))
+    app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_PARTICIPANTS_INVITED, events.vc_handler))
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]id$'), grouptools.get_id))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]mute$'), grouptools.mute_user))
-    app.add_handler(MessageHandler(filters.Regex(r'^[\./]ban$'), grouptools.ban_user))
     
+    # Group Admin Tools
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]id$'), grouptools.get_id))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]warn$'), grouptools.warn_user))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]mute$'), grouptools.mute_user))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]unmute$'), grouptools.unmute_user))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]ban$'), grouptools.ban_user))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]unban$'), grouptools.unban_user))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]kick$'), grouptools.kick_user))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]pin$'), grouptools.pin_message))
+    
+    # Message Logic (AI)
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
     
     print("🚀 MIMI BOT STARTED SUCCESSFULLY!")
