@@ -10,4 +10,4 @@ Pillow
 yt-dlp
 tgcrypto
 pyrogram
-py-tgcalls==2.2.8
+py-tgcalls
