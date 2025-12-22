@@ -222,6 +222,17 @@ TIMEZONES = {
     "mcc": "Asia/Kolkata"
 }
 
+# Fancy Text Converter (SAME AS WORDGRID)
+def to_fancy(text):
+    mapping = {
+        'A': 'Λ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'Є', 
+        'F': 'ғ', 'G': 'ɢ', 'H': 'ʜ', 'I': 'ɪ', 'J': 'ᴊ', 
+        'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'σ', 
+        'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ', 'S': 'δ', 'T': 'ᴛ', 
+        'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'х', 'Y': 'ʏ', 'Z': 'ᴢ'
+    }
+    return "".join(mapping.get(c.upper(), c) for c in text)
+
 def get_current_time(city="delhi"):
     """Get current time for a city"""
     city = city.lower()
@@ -246,6 +257,18 @@ def get_current_time(city="delhi"):
         # Get weekday
         weekday = now.strftime("%A")
         
+        # Get fancy weekday
+        fancy_weekday = to_fancy(weekday.upper())
+        
+        # Get fancy month
+        fancy_month = to_fancy(month_name.upper())
+        
+        # Get fancy city
+        fancy_city = to_fancy(city.upper())
+        
+        # Get fancy timezone
+        fancy_timezone = to_fancy(timezone_str.split('/')[-1].upper())
+        
         return {
             'time': time_str,
             'date': date_str,
@@ -253,7 +276,11 @@ def get_current_time(city="delhi"):
             'month': month_name,
             'weekday': weekday,
             'timezone': timezone_str,
-            'city': city.title()
+            'city': city.title(),
+            'fancy_city': fancy_city,
+            'fancy_timezone': fancy_timezone,
+            'fancy_weekday': fancy_weekday,
+            'fancy_month': fancy_month
         }
     except:
         # Fallback to UTC
@@ -266,32 +293,44 @@ def get_current_time(city="delhi"):
             'month': now.strftime("%B"),
             'weekday': now.strftime("%A"),
             'timezone': "Asia/Kolkata",
-            'city': "Delhi"
+            'city': "Delhi",
+            'fancy_city': "ᴅᴇʟʜɪ",
+            'fancy_timezone': "ᴋᴏʟᴋᴀᴛᴀ",
+            'fancy_weekday': to_fancy(now.strftime("%A").upper()),
+            'fancy_month': to_fancy(now.strftime("%B").upper())
         }
 
 def create_time_display(city="delhi"):
-    """Create beautiful time display"""
+    """Create beautiful time display with FANCY TEXT"""
     time_data = get_current_time(city)
     
-    # Create compact time display
-    time_display = f"""<b>🕒 LIVE TIME</b>
+    # Create fancy time display
+    time_display = f"""<blockquote><b>🕒 {to_fancy("LIVE TIME")}</b></blockquote>
 
-<b>📍 City:</b> {time_data['city']}
-<b>🌐 Timezone:</b> {time_data['timezone'].split('/')[-1]}
+<blockquote>
+<b>📍 {to_fancy("CITY")}:</b> {time_data['fancy_city']}
+<b>🌐 {to_fancy("TIMEZONE")}:</b> {time_data['fancy_timezone']}
+</blockquote>
 
-<b>⏰ Time:</b> <code>{time_data['time']}</code>
+<blockquote>
+<b>⏰ {to_fancy("TIME")}:</b> <code>{time_data['time']}</code>
+</blockquote>
 
-<b>📅 Date:</b> {time_data['date']}
-<b>📆 Day:</b> {time_data['day']} | <b>Month:</b> {time_data['month']}
-<b>🌞 Weekday:</b> {time_data['weekday']}
+<blockquote>
+<b>📅 {to_fancy("DATE")}:</b> {time_data['date']}
+<b>📆 {to_fancy("DAY")}:</b> {time_data['day']} | <b>{to_fancy("MONTH")}:</b> {time_data['fancy_month']}
+<b>🌞 {to_fancy("WEEKDAY")}:</b> {time_data['fancy_weekday']}
+</blockquote>
 
-<b>🔄 Updates every second</b>
-<b>📍 Use:</b> <code>/time mumbai</code> for different city"""
+<blockquote>
+<b>🔄 {to_fancy("UPDATES EVERY SECOND")}</b>
+<b>📍 {to_fancy("USE")}:</b> <code>/time mumbai</code> {to_fancy("FOR DIFFERENT CITY")}
+</blockquote>"""
     
     return time_display
 
 async def update_live_time(context: ContextTypes.DEFAULT_TYPE):
-    """Update live time message - FIXED VERSION"""
+    """Update live time message"""
     chat_id = context.job.chat_id
     
     if chat_id in active_time_messages:
@@ -311,8 +350,7 @@ async def update_live_time(context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.HTML
             )
         except Exception as e:
-            # Message might be deleted or bot doesn't have permission
-            print(f"Error updating time in chat {chat_id}: {e}")
+            print(f"❌ LIVE TIME: Error updating time: {e}")
             if chat_id in active_time_messages:
                 del active_time_messages[chat_id]
 
@@ -320,11 +358,7 @@ async def start_live_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start live time display"""
     chat_id = update.effective_chat.id
     
-    # Delete command message
-    try:
-        await update.message.delete()
-    except:
-        pass
+    print(f"LIVE TIME: Command received in chat {chat_id}")
     
     # Check for city argument
     city = "delhi"
@@ -339,16 +373,23 @@ async def start_live_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     city = key
                     break
     
+    print(f"LIVE TIME: Creating display for city {city}")
+    
     # Create initial time display
     time_display = create_time_display(city)
     kb = [[InlineKeyboardButton("❌ Close", callback_data="close_time")]]
     
     # Send time message
-    msg = await update.message.reply_text(
-        text=time_display,
-        reply_markup=InlineKeyboardMarkup(kb),
-        parse_mode=ParseMode.HTML
-    )
+    try:
+        msg = await update.message.reply_text(
+            text=time_display,
+            reply_markup=InlineKeyboardMarkup(kb),
+            parse_mode=ParseMode.HTML
+        )
+        print(f"✅ LIVE TIME: Message sent with ID {msg.message_id}")
+    except Exception as e:
+        print(f"❌ LIVE TIME: Error sending message: {e}")
+        return
     
     # Store message info
     active_time_messages[chat_id] = {
@@ -361,27 +402,41 @@ async def start_live_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await msg.pin(disable_notification=True)
         active_time_messages[chat_id]['pinned'] = True
+        print(f"✅ LIVE TIME: Message pinned")
     except Exception as e:
-        print(f"Could not pin time message: {e}")
+        print(f"⚠️ LIVE TIME: Could not pin message: {e}")
     
-    # Schedule live updates every second - FIXED
+    # Schedule live updates every second
     if context.job_queue:
+        # First remove any existing job for this chat
+        current_jobs = context.job_queue.get_jobs_by_name(f"livetime_{chat_id}")
+        for job in current_jobs:
+            job.schedule_removal()
+            print(f"🔄 LIVE TIME: Removed existing job")
+        
+        # Schedule new job
         job = context.job_queue.run_repeating(
-            update_live_time,
+            callback=update_live_time,
             interval=1,  # Update every second
-            first=1,     # First update after 1 second
+            first=0,     # Start immediately
             chat_id=chat_id,
             name=f"livetime_{chat_id}"
         )
         active_time_messages[chat_id]['job'] = job
-        print(f"LIVE TIME: Started live updates for chat {chat_id}, city: {city}")
+        print(f"✅ LIVE TIME: Started live updates for chat {chat_id}, city: {city}")
+    else:
+        print(f"❌ LIVE TIME: No job_queue available!")
 
 async def close_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Close live time display"""
+    """Close live time display - FIXED"""
     query = update.callback_query
-    await query.answer()
+    
+    # Answer the callback FIRST
+    await query.answer("⏰ Time display closed!")
     
     chat_id = query.message.chat_id
+    
+    print(f"CLOSE TIME: Close button clicked in chat {chat_id}")
     
     if chat_id in active_time_messages:
         # Get message info
@@ -391,9 +446,9 @@ async def close_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if 'job' in msg_info:
             try:
                 msg_info['job'].schedule_removal()
-                print(f"LIVE TIME: Stopped updates for chat {chat_id}")
-            except:
-                pass
+                print(f"✅ CLOSE TIME: Stopped updates for chat {chat_id}")
+            except Exception as e:
+                print(f"⚠️ CLOSE TIME: Error removing job: {e}")
         
         # Unpin message if pinned
         if msg_info.get('pinned'):
@@ -402,25 +457,37 @@ async def close_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=chat_id,
                     message_id=msg_info['message_id']
                 )
-            except:
-                pass
+                print(f"✅ CLOSE TIME: Message unpinned")
+            except Exception as e:
+                print(f"⚠️ CLOSE TIME: Error unpinning: {e}")
         
         # Delete the time message
         try:
             await query.message.delete()
-        except:
-            pass
+            print(f"✅ CLOSE TIME: Message deleted")
+        except Exception as e:
+            print(f"⚠️ CLOSE TIME: Error deleting message: {e}")
+            # If can't delete, edit it to show it's closed
+            try:
+                await query.message.edit_text(
+                    text="⏰ <b>Time display closed</b>",
+                    parse_mode=ParseMode.HTML
+                )
+            except:
+                pass
         
         # Remove from storage
         del active_time_messages[chat_id]
-        print(f"LIVE TIME: Cleaned up for chat {chat_id}")
+        print(f"✅ CLOSE TIME: Cleaned up for chat {chat_id}")
     else:
-        await query.answer("No active time display.", show_alert=True)
+        await query.answer("⚠️ No active time display found.", show_alert=True)
 
 async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle time callback queries"""
     query = update.callback_query
     data = query.data
+    
+    print(f"TIME CALLBACK: Received callback data: {data}")
     
     if data == "close_time":
         await close_time(update, context)
