@@ -19,10 +19,7 @@ from database import (
 from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
-# 🔥 IMPORT MUSIC ENGINE (Userbot Start karne ke liye)
-from engine import start_music_engine
-
-# MODULES (OLD ONES)
+# MODULES (OLD ONES - Hardcoded)
 import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
 import livetime  
 import dmspam 
@@ -59,8 +56,11 @@ def load_plugins(application: Application):
     
     # Check agar folder nahi hai toh bana do
     if not os.path.exists(plugin_dir):
-        os.makedirs(plugin_dir)
-        print(f"📁 Created '{plugin_dir}' directory.")
+        try:
+            os.makedirs(plugin_dir)
+            print(f"📁 Created '{plugin_dir}' directory.")
+        except:
+            pass
         return
 
     # Folder ke andar ki files scan karo
@@ -91,13 +91,7 @@ def load_plugins(application: Application):
 async def on_startup(application: Application):
     print(f"🚀 {BOT_NAME} IS STARTING...")
     
-    # 🔥 1. Start Music Engine (Userbot + PyTgCalls)
-    try:
-        await start_music_engine()
-    except Exception as e:
-        print(f"❌ Music Engine Fail (Check Config): {e}")
-
-    # 🔥 2. Logger Logic
+    # Logger Logic
     logger_id = get_logger_group()
     if logger_id:
         try:
@@ -408,4 +402,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-            
+                   
