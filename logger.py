@@ -6,8 +6,9 @@ import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from config import OWNER_ID
-from database import get_total_users, get_total_groups
+# Yahan OWNER_IDS import kiya hai (List wala)
+from config import OWNER_IDS 
+from database import get_total_users, get_total_groups, get_logger_group
 
 # Fancy Font Helper
 def to_fancy(text):
@@ -17,14 +18,15 @@ def to_fancy(text):
 # --- RESTART COMMAND ---
 async def restart_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if str(user.id) != str(OWNER_ID): 
+    # CHANGE: Ab ye List me check karega
+    if user.id not in OWNER_IDS: 
         return
 
     msg = await update.message.reply_text(
         f"<blockquote><b>🔄 {to_fancy('RESTARTING SYSTEM')}...</b></blockquote>", 
         parse_mode=ParseMode.HTML
     )
-    await time.sleep(2)
+    time.sleep(2)
     await msg.edit_text(
         f"<blockquote><b>✅ {to_fancy('SYSTEM REBOOTED')}!</b>\nBack online in 5 seconds.</blockquote>",
         parse_mode=ParseMode.HTML
@@ -93,7 +95,8 @@ async def ping_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- STATS COMMAND (OWNER ONLY) ---
 async def stats_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if str(user.id) != str(OWNER_ID): 
+    # CHANGE: Ab ye List me check karega
+    if user.id not in OWNER_IDS: 
         return
 
     try:
@@ -113,3 +116,4 @@ async def stats_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     kb = [[InlineKeyboardButton("🗑 Close Stats", callback_data="close_log")]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+    
