@@ -26,7 +26,7 @@ def get_automated_wish(wish_type):
     
     api_key = random.choice(available_keys)
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     time_str = get_current_time_str()
     
