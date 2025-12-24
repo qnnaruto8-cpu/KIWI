@@ -65,7 +65,7 @@ async def on_startup(application: Application):
 <blockquote>
 <b>🤖 ʙᴏᴛ ɴᴀᴍᴇ :</b> {BOT_NAME}
 <b>🆔 ʙᴏᴛ ɪᴅ :</b> <code>{me.id}</code>
-<b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> @{username}
+<b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> {username}
 </blockquote>
 
 """
