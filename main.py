@@ -1,5 +1,6 @@
 import random
 import os
+import importlib # 🔥 Added for Auto-Loader
 from threading import Thread
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -7,19 +8,21 @@ from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 # IMPORTS
-# 🔥 Added BOT_NAME here
 from config import TELEGRAM_TOKEN, BOT_NAME 
 from database import (
     users_col, codes_col, update_balance, get_balance, 
     check_registered, register_user, update_group_activity, 
     update_username, update_chat_stats,
     is_user_muted, is_user_banned,
-    get_logger_group # 🔥 Added this to fetch Logger ID
+    get_logger_group
 )
 from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
-# MODULES
+# 🔥 IMPORT MUSIC ENGINE (Userbot Start karne ke liye)
+from music_engine import start_music_engine
+
+# MODULES (OLD ONES)
 import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
 import livetime  
 import dmspam 
@@ -46,19 +49,61 @@ async def delete_job(context):
     try: await context.bot.delete_message(context.job.chat_id, context.job.data)
     except: pass
 
-# --- STARTUP MESSAGE FUNCTION (FANCY & BLOCKQUOTE) ---
+# --- 🔌 AUTO LOADER FUNCTION (NEW) ---
+def load_plugins(application: Application):
+    """
+    Tools folder ke andar jitni bhi python files hain, 
+    unko auto-load karega agar unme 'register_handlers' function hua.
+    """
+    plugin_dir = "tools"
+    
+    # Check agar folder nahi hai toh bana do
+    if not os.path.exists(plugin_dir):
+        os.makedirs(plugin_dir)
+        print(f"📁 Created '{plugin_dir}' directory.")
+        return
+
+    # Folder ke andar ki files scan karo
+    path_list = [
+        f for f in os.listdir(plugin_dir) 
+        if f.endswith(".py") and f != "__init__.py"
+    ]
+
+    print(f"🔌 Loading {len(path_list)} plugins from '{plugin_dir}'...")
+
+    for file in path_list:
+        module_name = file[:-3]  # .py hatao
+        try:
+            # Dynamic Import
+            module = importlib.import_module(f"{plugin_dir}.{module_name}")
+            
+            # Har file me 'register_handlers' function dhundo
+            if hasattr(module, "register_handlers"):
+                module.register_handlers(application)
+                print(f"  ✅ Loaded: {module_name}")
+            else:
+                print(f"  ⚠️ Skipped: {module_name} (No 'register_handlers' found)")
+        
+        except Exception as e:
+            print(f"  ❌ Failed to load {module_name}: {e}")
+
+# --- STARTUP MESSAGE FUNCTION ---
 async def on_startup(application: Application):
     print(f"🚀 {BOT_NAME} IS STARTING...")
     
-    # Database se Logger Group ID nikalo
+    # 🔥 1. Start Music Engine (Userbot + PyTgCalls)
+    try:
+        await start_music_engine()
+    except Exception as e:
+        print(f"❌ Music Engine Fail (Check Config): {e}")
+
+    # 🔥 2. Logger Logic
     logger_id = get_logger_group()
-    
     if logger_id:
         try:
             me = await application.bot.get_me()
             username = me.username
             
-            # 🔥 FANCY MESSAGE WITH BLOCKQUOTE
             txt = f"""
 <blockquote><b>{BOT_NAME}ʙᴏᴛ active 🍭</b></blockquote>
 
@@ -67,10 +112,7 @@ async def on_startup(application: Application):
 <b>🆔 ʙᴏᴛ ɪᴅ :</b> <code>{me.id}</code>
 <b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> {username}
 </blockquote>
-
 """
-            
-            # Send to Logger Group
             await application.bot.send_message(chat_id=logger_id, text=txt, parse_mode=ParseMode.HTML)
             print("✅ Startup message sent to Logger!")
         except Exception as e:
@@ -293,29 +335,25 @@ def main():
     # 🔥 Added post_init=on_startup here
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
     
-    # Core Commands
+    # --- A. EXISTING HANDLERS (Hardcoded) ---
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("help", help.help_command))
     app.add_handler(CommandHandler("admin", admin.admin_panel))
     
-    # User Info & Fun
     app.add_handler(CommandHandler("info", info.user_info))
     app.add_handler(CommandHandler("love", info.love_calculator))
     app.add_handler(CommandHandler("stupid", info.stupid_meter))
     app.add_handler(CommandHandler("couple", couple.couple_check))
     
-    # Economy
     app.add_handler(CommandHandler("bal", check_balance))
     app.add_handler(CommandHandler("redeem", redeem_code))
     app.add_handler(CommandHandler("shop", shop_menu))
     
-    # Leaderboard & Stats
     app.add_handler(CommandHandler("top", leaderboard.user_leaderboard))
     app.add_handler(CommandHandler("ranking", group.ranking))
     app.add_handler(CommandHandler("stats", logger.stats_bot))
     app.add_handler(CommandHandler("ping", logger.ping_bot))
     
-    # Games & Market
     app.add_handler(CommandHandler("bet", bet.bet_menu))
     app.add_handler(CommandHandler("new", wordseek.start_wordseek))
     app.add_handler(CommandHandler("wordgrid", wordgrid.start_wordgrid))
@@ -325,28 +363,23 @@ def main():
     app.add_handler(CommandHandler("sell", group.sell_shares))
     app.add_handler(CommandHandler("topinvest", group.top_investors))
     
-    # Banking
     app.add_handler(CommandHandler("bank", bank.bank_info))
     app.add_handler(CommandHandler("deposit", bank.deposit))
     app.add_handler(CommandHandler("withdraw", bank.withdraw))
     app.add_handler(CommandHandler("loan", bank.take_loan))
     app.add_handler(CommandHandler("payloan", bank.repay_loan))
     
-    # Pay & RPG
     app.add_handler(CommandHandler("pay", pay.pay_user))
     app.add_handler(CommandHandler("rob", pay.rob_user))
     app.add_handler(CommandHandler("kill", pay.kill_user))
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
     
-    # Time Command
     app.add_handler(CommandHandler("time", livetime.start_live_time))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
 
-    # Callback Handlers
     app.add_handler(CallbackQueryHandler(callback_handler))
     
-    # Event Handlers (Join/Leave/VC)
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, events.welcome_user))
     app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, events.track_leave))
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_STARTED, events.vc_handler))
@@ -355,7 +388,6 @@ def main():
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
-    # Group Admin Tools
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]id$'), grouptools.get_id))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]warn$'), grouptools.warn_user))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]mute$'), grouptools.mute_user))
@@ -365,7 +397,10 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]kick$'), grouptools.kick_user))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]pin$'), grouptools.pin_message))
     
-    # Message Logic (AI)
+    # --- B. NEW MODULES (TOOLS FOLDER - AUTO LOAD) ---
+    load_plugins(app)
+
+    # --- C. MESSAGE HANDLER (LAST PRIORITY) ---
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
     
     print(f"🚀 {BOT_NAME} STARTED SUCCESSFULLY!")
@@ -373,4 +408,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+            
