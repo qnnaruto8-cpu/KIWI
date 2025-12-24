@@ -60,7 +60,7 @@ async def on_startup(application: Application):
             
             # 🔥 FANCY MESSAGE WITH BLOCKQUOTE
             txt = f"""
-<blockquote><b>🟢 SYSTEM BOOTED SUCCESSFULLY</b></blockquote>
+<blockquote><b>{BOT_NAME}ʙᴏᴛ active 🍭</b></blockquote>
 
 <blockquote>
 <b>🤖 ʙᴏᴛ ɴᴀᴍᴇ :</b> {BOT_NAME}
@@ -68,7 +68,6 @@ async def on_startup(application: Application):
 <b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> @{username}
 </blockquote>
 
-<blockquote><i>🚀 Bot is now fully active and ready to serve!</i></blockquote>
 """
             
             # Send to Logger Group
@@ -77,13 +76,6 @@ async def on_startup(application: Application):
         except Exception as e:
             print(f"⚠️ Failed to send startup message: {e}")
             
-            
-            # Send to Logger Group
-            await application.bot.send_message(chat_id=logger_id, text=txt, parse_mode=ParseMode.HTML)
-            print("✅ Startup message sent to Logger!")
-        except Exception as e:
-            print(f"⚠️ Failed to send startup message: {e}")
-
 # --- SHOP MENU ---
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
@@ -266,11 +258,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     should_reply = False
     if chat.type == "private": should_reply = True
-    elif any(trigger in text.lower() for trigger in ["mimi", "yuki", context.bot.username.lower()]): should_reply = True
+    elif any(trigger in text.lower() for trigger in ["aniya", context.bot.username.lower()]): should_reply = True
     elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id: should_reply = True
 
     if should_reply:
-        voice_triggers = ["voice", "audio", "bol", "bolo", "speak", "suna", "rec", "batao", "sunao", "kaho"]
+        voice_triggers = ["voice", "note", "moh", "audio", "gn", "gm", "rec","kaho"]
         wants_voice = any(v in text.lower() for v in voice_triggers)
 
         await context.bot.send_chat_action(chat_id=chat.id, action="typing")
