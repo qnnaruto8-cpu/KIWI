@@ -10,7 +10,7 @@ OWNER_IDS = [7453179290, 6356015122]  # Yahan dusre bande ki ID daal dena
 # config.py ke andar ye hona chahiye
 LOGGER_ID = -1003639584506 
 
-ASSISTANT_ID = 8228478790
+ASSISTANT_ID = 8457855985
 #bot name 
 BOT_NAME = "ㅤ𝚲𝛈𝛊𝛄𝛂me "
 
