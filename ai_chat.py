@@ -1,5 +1,6 @@
 import google.generativeai as genai
 from config import OWNER_NAME
+from config import OWNER_USERNAME
 from database import get_all_keys, get_sticker_packs
 import random
 import pytz 
