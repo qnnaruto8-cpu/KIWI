@@ -1,4 +1,4 @@
-# --- Core Bot ---
+# --- Main Bot ---
 python-telegram-bot
 pymongo
 dnspython
@@ -9,10 +9,10 @@ pytz
 edge-tts
 Pillow
 
-# --- Music Engine (STRICT VERSIONS) ---
-# Ye versions ek dusre ke liye bane hain
+# --- Music Engine (Tested & Stable) ---
+# Ye combination music bots ke liye standard hai
 pyrogram==2.0.106
-py-tgcalls==0.9.0
+py-tgcalls==2.2.8
 tgcrypto
 yt-dlp
 youtube-search-python
