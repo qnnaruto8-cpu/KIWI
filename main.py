@@ -20,7 +20,8 @@ from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
 # MODULES (OLD ONES - Hardcoded)
-import admin, start, help, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
+# Removed 'help' import as per request to move it to tools
+import admin, start, group, leaderboard, pay, bet, wordseek, grouptools, chatstat, logger, events, info, tictactoe, couple
 import livetime  
 import dmspam 
 import bank 
@@ -124,7 +125,9 @@ async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = []
     for k, v in SHOP_ITEMS.items():
         kb.append([InlineKeyboardButton(f"{v['name']} - ₹{v['price']}", callback_data=f"buy_{k}_{uid}")])
-    kb.append([InlineKeyboardButton("❌ Close", callback_data=f"close_help")])
+    
+    # Close button now points to back_home instead of close_help
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="back_home")])
     
     await msg_func("🛒 **VIP SHOP**\nBuy special titles here:", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
@@ -147,9 +150,17 @@ async def callback_handler(update, context):
     data = q.data
     uid = q.from_user.id
     
-    if data in ["close_log", "close_ping", "close_help"]:
+    # Basic Close Handlers
+    if data in ["close_log", "close_ping"]:
         try: await q.message.delete()
         except: pass
+        return
+
+    # --- START MENU HANDLERS ---
+    
+    if data == "back_home":
+        await q.answer()
+        await start.start_callback(update, context)
         return
 
     if data == "open_shop":
@@ -166,26 +177,17 @@ async def callback_handler(update, context):
 
     if data == "open_ranking":
         await q.answer()
-        await leaderboard.user_leaderboard(update, context)
+        # Ensure leaderboard module has a way to handle callback edit or call it appropriately
+        await leaderboard.user_leaderboard(update, context) 
         return
 
-    if data == "open_commands":
-        await q.answer()
-        await help.help_callback(update, context)
-        return
-    
-    if data == "back_home":
-        await q.answer()
-        await start.start_callback(update, context)
-        return
+    # Note: open_commands/help logic removed as per request to move to tools/help.py
 
-    if data.startswith(("help_", "mod_")): 
-        await help.help_callback(update, context)
-        return
-        
     if data.startswith(("start_", "st_")):
         await start.start_callback(update, context)
         return
+
+    # --- MODULE HANDLERS ---
 
     if data.startswith("admin_"):
         await admin.admin_callback(update, context)
@@ -331,7 +333,7 @@ def main():
     
     # --- A. EXISTING HANDLERS (Hardcoded) ---
     app.add_handler(CommandHandler("start", start.start))
-    app.add_handler(CommandHandler("help", help.help_command))
+    # Removed hardcoded help handler: app.add_handler(CommandHandler("help", help.help_command))
     app.add_handler(CommandHandler("admin", admin.admin_panel))
     
     app.add_handler(CommandHandler("info", info.user_info))
@@ -392,6 +394,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]pin$'), grouptools.pin_message))
     
     # --- B. NEW MODULES (TOOLS FOLDER - AUTO LOAD) ---
+    # Help handler will be loaded from here once you create tools/help.py
     load_plugins(app)
 
     # --- C. MESSAGE HANDLER (LAST PRIORITY) ---
@@ -402,4 +405,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                   
+                                      
