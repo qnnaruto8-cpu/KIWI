@@ -1,22 +1,3 @@
-Python-telegram-bot
-pymongo
-dnspython
-flask
-google-generativeai
-psutil
-pytz
-edge-tts
-ffmpeg-python
-tgcrypto
-py-tgcalls==0.9.7
-nest_asyncio
-Pillow
-python-dotenv
-youtube-search-python
-aiohttp
-aiofiles
-httpx==0.27.2
-Python-telegram-bot
 pymongo
 dnspython
 flask
@@ -36,3 +17,4 @@ aiofiles
 httpx==0.27.2
 git+https://github.com/KurimuzonAkuma/pyrogram
 git+https://github.com/yt-dlp/yt-dlp
+
