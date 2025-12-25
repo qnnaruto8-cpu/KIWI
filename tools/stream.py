@@ -1,7 +1,7 @@
 import os
 from pyrogram import Client
 from pytgcalls import PyTgCalls
-from pytgcalls.types import InputAudioStream, Update
+from pytgcalls.types import AudioPiped, Update  # ✅ FIX: InputAudioStream hata diya
 from config import API_ID, API_HASH, SESSION
 from tools.queue import put_queue, pop_queue, clear_queue, get_queue
 from tools.database import is_active_chat, add_active_chat, remove_active_chat
@@ -41,9 +41,10 @@ async def play_stream(chat_id, file_path, title, duration, user):
     # 2. Nahi baj raha -> Direct Play karo
     else:
         try:
+            # ✅ FIX: AudioPiped use kiya
             await call_py.join_group_call(
                 int(chat_id),
-                InputAudioStream(file_path),
+                AudioPiped(file_path),
             )
             add_active_chat(chat_id) # Database mein Active mark karo
             await put_queue(chat_id, file_path, title, duration, user) # Queue init karo
@@ -68,9 +69,10 @@ async def stream_end_handler(client, update: Update):
         print(f"▶️ Auto-Playing Next: {title}")
         
         try:
+            # ✅ FIX: AudioPiped use kiya
             await call_py.change_stream(
                 chat_id,
-                InputAudioStream(file),
+                AudioPiped(file),
             )
         except Exception as e:
             print(f"❌ Auto-Play Error: {e}")
@@ -97,4 +99,4 @@ async def stop_stream(chat_id):
         return True
     except:
         return False
-      
+
