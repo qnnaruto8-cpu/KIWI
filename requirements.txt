@@ -16,6 +16,6 @@ youtube-search-python
 aiohttp
 aiofiles
 httpx==0.27.2
-git+https://github.com/KurimuzonAkuma/pyrogram
+pyrogram==2.0.106
 git+https://github.com/yt-dlp/yt-dlp
 
