@@ -8,7 +8,7 @@ pytz
 edge-tts
 ffmpeg-python
 tgcrypto==1.2.5
-py-tgcalls
+py-tgcalls==1.0.1
 nest_asyncio
 Pillow
 python-dotenv
