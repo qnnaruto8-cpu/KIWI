@@ -4,6 +4,7 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
+
 # 🔥 Database Imports
 from database import check_registered, register_user, get_logger_group 
 from config import OWNER_ID, OWNER_NAME
@@ -11,10 +12,11 @@ from config import OWNER_ID, OWNER_NAME
 from ai_chat import get_mimi_sticker
 
 # --- GLOBAL VARS ---
-START_IMG = "[https://i.ibb.co/8gW9bqTd/IMG-20251224-191812-875.jpg](https://i.ibb.co/8gW9bqTd/IMG-20251224-191812-875.jpg)" 
+# ✅ FIX: Direct Links (Markdown brackets hata diye)
+START_IMG = "https://i.ibb.co/8gW9bqTd/IMG-20251224-191812-875.jpg" 
 BOT_START_TIME = time.time()
-SUPPORT_LINK = "[https://t.me/+aw9rUJoO2JYwNjQ1](https://t.me/+aw9rUJoO2JYwNjQ1)" 
-UPDATE_CHANNEL = "[https://t.me/PRINCE_BOTS_UPDATES](https://t.me/PRINCE_BOTS_UPDATES)" 
+SUPPORT_LINK = "https://t.me/+aw9rUJoO2JYwNjQ1" 
+UPDATE_CHANNEL = "https://t.me/PRINCE_BOTS_UPDATES" 
 
 # --- HELPER: GET UPTIME ---
 def get_readable_time():
@@ -75,28 +77,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
     
-    # 🔥 TRICK: Using variable for backticks to fix copy-paste issue
     CodeBlock = "```"
 
-    # 🔥 NEW UPDATED TEXT IS HERE
     caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
 ┆◍ ʜєʏ, {user.first_name} 🥀
 ┆◍ ɪ ᴧϻ {bot_name}
 └────────────────────•
-{CodeBlock}
-ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ, ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
-{CodeBlock}
 
-{CodeBlock}
+```
+ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ, ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
+```
+```
 ╭─ ⚙️ SYSTEM STATUS
 │ ➥ UPTIME: {uptime}
 │ ➥ SERVER STORAGE: {disk:.1f}%
 │ ➥ CPU LOAD: {cpu:.1f}%
 │ ➥ RAM CONSUMPTION: {ram:.1f}%
 ╰───────────────
-{CodeBlock}
+```
 •──────────────────────•
-✦ ᴘᴏᴡєʀєᴅ ʙʏ © {owner_link}
+```
+✦ ᴘᴏᴡєʀєᴅ ʙʏ © BOSS JI 
+```
 """
 
     # --- 3. AUTO REGISTRATION & LOGGER ---
@@ -122,21 +124,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"⚠️ Logger Error: {e}")
             
     # --- 🔥 BUTTONS LAYOUT 🔥 ---
+    # ✅ FIX: URLs ab direct variable se aa rahe hain (Bina Markdown ke)
     keyboard = [
-        # Row 1: Add Group (Full)
         [
-            InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{bot_username}?startgroup=true")
+            InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"[https://t.me/](https://t.me/){bot_username}?startgroup=true")
         ],
-        # Row 2: Help Commands (Full)
         [
             InlineKeyboardButton("📚 Help Commands", callback_data="help_main")
         ],
-        # Row 3: Update | Support (Half-Half)
         [
             InlineKeyboardButton("📢 Update", url=UPDATE_CHANNEL),
             InlineKeyboardButton("🚑 Support", url=SUPPORT_LINK)
         ],
-        # Row 4: Owner (Full)
         [
             InlineKeyboardButton("👑 Owner", url=f"tg://user?id={OWNER_ID}")
         ]
@@ -152,7 +151,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
     except:
-        # Fallback without codeblocks if markdown fails
         await update.message.reply_photo(
             photo=START_IMG,
             caption=caption.replace(CodeBlock, ""),
@@ -208,21 +206,26 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ┆◍ ʜєʏ, {user.first_name} 🥀
 ┆◍ ɪ ᴧϻ {context.bot.first_name}
 └────────────────────•
-{CodeBlock}
-ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ, ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
-{CodeBlock}
+```
+ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ.
+ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ, 
+ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
+```
 
-{CodeBlock}
-➥ᴜᴘᴛɪᴍᴇ: {uptime}
-➥sᴇʀᴠᴇʀ sᴛᴏʀᴀɢᴇ: {disk:.1f}%
-➥ᴄᴘᴜ ʟᴏᴀᴅ: {cpu:.1f}%
-➥ʀᴀᴍ ᴄᴏɴsᴜᴍᴘᴛɪᴏɴ: {ram:.1f}%
-{CodeBlock}
+```
+╭─ ⚙️ SYSTEM STATUS
+│ ➥ UPTIME: {uptime}
+│ ➥ SERVER STORAGE: {disk:.1f}%
+│ ➥ CPU LOAD: {cpu:.1f}%
+│ ➥ RAM CONSUMPTION: {ram:.1f}%
+╰───────────────
+```
 •──────────────────────•
-✦ᴘᴏᴡєʀєᴅ ʙʏ » {owner_link}
+✦ᴘᴏᴡєʀєᴅ ʙʏ » BOSS JI
 """
+        # ✅ FIX: Yahan bhi Markdown hata diya URLs se
         keyboard = [
-            [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"[https://t.me/](https://t.me/){context.bot.username}?startgroup=true")],
+            [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{context.bot.username}?startgroup=true")],
             [InlineKeyboardButton("📚 Help Commands", callback_data="help_main")],
             [InlineKeyboardButton("📢 Update", url=UPDATE_CHANNEL), InlineKeyboardButton("🚑 Support", url=SUPPORT_LINK)],
             [InlineKeyboardButton("👑 Owner", url=f"tg://user?id={OWNER_ID}")]
