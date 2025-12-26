@@ -1,21 +1,21 @@
 import time
 import psutil
 import asyncio
+import html 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 # 🔥 Database Imports
 from database import check_registered, register_user, get_logger_group 
-from config import OWNER_ID, OWNER_NAME
+# ✅ FIX: Ab saare links Config se aayenge
+from config import OWNER_ID, OWNER_NAME, GROUP_LINK, INSTAGRAM_LINK 
 # 🔥 AI Chat Import
 from ai_chat import get_mimi_sticker
 
 # --- GLOBAL VARS ---
-# ✅ FIX: Direct Links (Markdown brackets hata diye)
 START_IMG = "https://i.ibb.co/8gW9bqTd/IMG-20251224-191812-875.jpg" 
 BOT_START_TIME = time.time()
-SUPPORT_LINK = "https://t.me/+aw9rUJoO2JYwNjQ1" 
 UPDATE_CHANNEL = "https://t.me/PRINCE_BOTS_UPDATES" 
 
 # --- HELPER: GET UPTIME ---
@@ -33,6 +33,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     bot_name = context.bot.first_name
     bot_username = context.bot.username
+    
+    first_name = html.escape(user.first_name)
     
     # --- 1. ANIMATION SEQUENCE ---
     try:
@@ -76,17 +78,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uptime = "00:00:00"; cpu=0; ram=0; disk=0
 
     owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
-    
     CodeBlock = "```"
 
     caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
-┆◍ ʜєʏ, {user.first_name} 🥀
+┆◍ ʜєʏ, {first_name} 🥀
 ┆◍ ɪ ᴧϻ {bot_name}
 └────────────────────•
+```
+ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. 
+ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ
+ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
+```
 
-```
-ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ, ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
-```
 ```
 ╭─ ⚙️ SYSTEM STATUS
 │ ➥ UPTIME: {uptime}
@@ -97,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ```
 •──────────────────────•
 ```
-✦ ᴘᴏᴡєʀєᴅ ʙʏ © BOSS JI 
+✦ ᴘᴏᴡєʀєᴅ ʙʏ © BOSS JI
 ```
 """
 
@@ -124,7 +127,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"⚠️ Logger Error: {e}")
             
     # --- 🔥 BUTTONS LAYOUT 🔥 ---
-    # ✅ FIX: URLs ab direct variable se aa rahe hain (Bina Markdown ke)
     keyboard = [
         [
             InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"[https://t.me/](https://t.me/){bot_username}?startgroup=true")
@@ -134,7 +136,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("📢 Update", url=UPDATE_CHANNEL),
-            InlineKeyboardButton("🚑 Support", url=SUPPORT_LINK)
+            # ✅ FIX: Ab ye Config se GROUP_LINK le raha hai
+            InlineKeyboardButton("🚑 Support", url=GROUP_LINK) 
+        ],
+        [
+            # ✅ NEW: Insta Button with Bot Name
+            InlineKeyboardButton(f"📸 Follow on {bot_name}", url=INSTAGRAM_LINK)
         ],
         [
             InlineKeyboardButton("👑 Owner", url=f"tg://user?id={OWNER_ID}")
@@ -150,7 +157,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
-    except:
+    except Exception as e:
+        print(f"Start Error: {e}")
         await update.message.reply_photo(
             photo=START_IMG,
             caption=caption.replace(CodeBlock, ""),
@@ -168,6 +176,8 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     data = q.data
     user = update.effective_user
+    bot_username = context.bot.username
+    bot_name = context.bot.first_name
     
     # 1. HELP MAIN
     if data == "help_main":
@@ -191,7 +201,9 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 3. BACK HOME
     elif data == "back_home":
-        owner_link = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
+        # Owner Link Markdown
+        owner_link_md = f"[{OWNER_NAME}](tg://user?id={OWNER_ID})"
+        
         try:
             uptime = get_readable_time()
             cpu = psutil.cpu_percent()
@@ -201,15 +213,14 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             uptime = "00:00:00"; cpu=0; ram=0; disk=0
 
         CodeBlock = "```"
+        first_name = html.escape(user.first_name)
 
         caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
-┆◍ ʜєʏ, {user.first_name} 🥀
+┆◍ ʜєʏ, {first_name} 🥀
 ┆◍ ɪ ᴧϻ {context.bot.first_name}
 └────────────────────•
 ```
-ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ.
-ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ, 
-ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
+ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ, ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
 ```
 
 ```
@@ -221,14 +232,18 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╰───────────────
 ```
 •──────────────────────•
-✦ᴘᴏᴡєʀєᴅ ʙʏ » BOSS JI
+```
+✦ᴘᴏᴡєʀєᴅ ʙʏ » BOSS JI 
+```
 """
-        # ✅ FIX: Yahan bhi Markdown hata diya URLs se
+        # ✅ FIX: Updated Keyboard here too
         keyboard = [
-            [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{context.bot.username}?startgroup=true")],
+            [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{bot_username}?startgroup=true")],
             [InlineKeyboardButton("📚 Help Commands", callback_data="help_main")],
-            [InlineKeyboardButton("📢 Update", url=UPDATE_CHANNEL), InlineKeyboardButton("🚑 Support", url=SUPPORT_LINK)],
+            [InlineKeyboardButton("📢 Update", url=UPDATE_CHANNEL), InlineKeyboardButton("🚑 Support", url=GROUP_LINK)],
+            [InlineKeyboardButton(f"📸 Follow on {bot_name}", url=INSTAGRAM_LINK)],
             [InlineKeyboardButton("👑 Owner", url=f"tg://user?id={OWNER_ID}")]
         ]
+        
         await q.edit_message_caption(caption=caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN)
         
