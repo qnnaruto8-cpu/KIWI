@@ -58,14 +58,14 @@ async def process_stream(chat_id, user_name, query):
 
     # --- 5. RESULT ---
     response = {
-    "title": title,
-    "duration": duration,
-    "thumbnail": open(final_thumb, "rb") if final_thumb else thumbnail,
-    "user": user_name,
-    "link": link,
-    "vidid": vidid,
-    "status": status,
-    "position": position
+        "title": title,
+        "duration": duration,
+        "thumbnail": final_thumb, # Generated Path
+        "user": user_name,
+        "link": link,
+        "vidid": vidid,
+        "status": status,    # True (Playing) / False (Queued)
+        "position": position # Queue Number
     }
     
     return None, response
