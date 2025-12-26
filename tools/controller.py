@@ -53,8 +53,18 @@ async def process_stream(chat_id, user_name, query):
     except Exception as e:
         return f"❌ Download Error: {e}", None
 
-    # --- 4. PLAYING / QUEUING ---
-    status, position = await play_stream(chat_id, file_path, title, duration, user_name)
+    # --- 4. PLAYING / QUEUING (🔥 FIXED HERE) ---
+    # ✅ FIX: Ab hum link aur final_thumb bhi pass kar rahe hain
+    # play_stream(chat_id, file, title, duration, user, link, thumbnail)
+    status, position = await play_stream(
+        chat_id, 
+        file_path, 
+        title, 
+        duration, 
+        user_name, 
+        link,        # ✅ Added Link
+        final_thumb  # ✅ Added Thumbnail
+    )
 
     # --- 5. RESULT ---
     response = {
@@ -69,4 +79,4 @@ async def process_stream(chat_id, user_name, query):
     }
     
     return None, response
-  
+    
