@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode, ChatAction
 from telegram.error import TelegramError
 
-# Imports (Make sure these modules exist in your folder structure)
+# Imports
 from tools.controller import process_stream
 from tools.stream import stop_stream, skip_stream, pause_stream, resume_stream, worker
 from tools.stream import LAST_MSG_ID, QUEUE_MSG_ID
@@ -59,71 +59,49 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
 
-    # --- 🔥 ASSISTANT JOIN LOGIC (FIXED) ---
+    # --- 🔥 VC CHECK & ASSISTANT JOIN LOGIC ---
     try:
-        # Step A: Check if Assistant is BANNED
+        # Step A: Check if Assistant is in Group
         try:
-            member = await chat.get_member(int(ASSISTANT_ID))
-            if member.status in ["kicked", "banned"]:
+            assistant_member = await chat.get_member(int(ASSISTANT_ID))
+            if assistant_member.status in ["kicked", "banned"]:
                 await status_msg.edit_text(
-                    f"<blockquote>❌ <b>ᴀssɪsᴛᴀɴᴛ ʙᴀɴɴᴇᴅ</b></blockquote>\nAssistant ID <code>{ASSISTANT_ID}</code> is banned.\nUnban it first.",
+                    f"<blockquote>❌ <b>ᴀssɪsᴛᴀɴᴛ ʙᴀɴɴᴇᴅ</b></blockquote>\nAssistant is banned in {chat.title}.\nUnban it to play music.",
                     parse_mode=ParseMode.HTML,
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑 ᴄʟᴏsᴇ", callback_data="force_close")]])
                 )
                 return
-        except: 
-            pass # Member not found or other error, proceed to join
+        except: pass
 
-        # Step B: Check if Assistant is ALREADY joined via Pyrogram
+        # Step B: Try to Join VC
         try:
-            await worker.get_chat_member(chat.id, ASSISTANT_ID)
-            # Agar koi error nahi aaya, matlab Assistant group mein hai.
-        except:
-            # Error aaya matlab Assistant group mein NAHI hai. Join karwao.
-            try:
-                if chat.username:
-                    # Public Group: Username se join (Fast)
-                    await worker.join_chat(chat.username)
-                else:
-                    # Private Group: Invite Link se join
-                    invite_link = await context.bot.export_chat_invite_link(chat.id)
-                    await worker.join_chat(invite_link)
-            except Exception as e:
-                err_str = str(e).lower()
-                if "already" in err_str or "participant" in err_str:
-                    pass # Already joined hai, ignore.
-                else:
-                    # Real Join Error (Ye VC Off nahi hai)
-                    print(f"⚠️ Assistant Join Error: {e}")
-                    await status_msg.edit_text(
-                        f"<blockquote>❌ <b>ᴀssɪsᴛᴀɴᴛ ᴇʀʀᴏʀ</b></blockquote>\nI cannot invite the assistant.\n\n<b>Reason:</b> <code>{e}</code>\n\n<i>Make sure I am Admin with 'Invite Users' permission.</i>",
-                        parse_mode=ParseMode.HTML
-                    )
-                    return
+            invite_link = await context.bot.export_chat_invite_link(chat.id)
+            await worker.join_chat(invite_link)
+        except Exception as e:
+            err_str = str(e).lower()
+            if "already" in err_str or "participant" in err_str:
+                pass 
+            else:
+                print(f"⚠️ Join Error: {e}")
+                await status_msg.edit_text(
+                    "<blockquote>❌ <b>ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ɪs ᴏғғ</b></blockquote>\n\n<b>Please Turn ON the Voice Chat first!</b>\n<i>Video Chat / Live Stream start karo.</i>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑 ᴄʟᴏsᴇ", callback_data="force_close")]])
+                )
+                return
 
     except Exception as e:
         print(f"Main Logic Error: {e}")
 
-    # --- CONTROLLER LOGIC (VC Check) ---
-    # process_stream tabhi call hoga jab assistant group mein hoga
+    # --- CONTROLLER LOGIC ---
     error, data = await process_stream(chat.id, user.first_name, query)
 
     if error:
-        err_msg = str(error).lower()
-        # Agar error mein 'call' ya 'voice' hai tabhi VC OFF bolo
-        if "call" in err_msg or "voice" in err_msg or "not found" in err_msg or "group call" in err_msg:
-             await status_msg.edit_text(
-                "<blockquote>❌ <b>ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ɪs ᴏғғ</b></blockquote>\n\n<b>Please Turn ON the Voice Chat first!</b>\n<i>Video Chat / Live Stream start karo.</i>",
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑 ᴄʟᴏsᴇ", callback_data="force_close")]])
-            )
-        else:
-            # Koi aur technical error (ffmpeg, download etc)
-            await status_msg.edit_text(
-                f"<blockquote>❌ <b>ᴇʀʀᴏʀ</b></blockquote>\n<code>{error}</code>",
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑 ᴄʟᴏsᴇ", callback_data="force_close")]])
-            )
+        await status_msg.edit_text(
+            f"<blockquote>❌ <b>ᴇʀʀᴏʀ</b></blockquote>\n{error}",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑 ᴄʟᴏsᴇ", callback_data="force_close")]])
+        )
         return
 
     # Data Extract & Shortening Title
@@ -173,7 +151,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try: await context.bot.delete_message(chat.id, LAST_MSG_ID[chat.id])
             except: pass
 
-        # 🔥 UPDATED CAPTION
+        # 🔥 UPDATED CAPTION (Separate Blockquotes)
         caption = f"""
 <blockquote><b>✅ sᴛᴀʀᴛᴇᴅ sᴛʀᴇᴀᴍɪɴɢ</b></blockquote>
 
@@ -219,7 +197,7 @@ async def unban_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await query.answer(f"Error: {e}", show_alert=True)
 
-# --- COMMANDS: STOP / SKIP / PAUSE ---
+# --- COMMANDS ---
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     command = update.message.text.split()[0].replace("/", "").lower()
@@ -250,7 +228,6 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await temp.delete()
     except: pass
 
-# --- REGISTER HANDLERS ---
 def register_handlers(app):
     app.add_handler(CommandHandler(["play", "p"], play_command))
     app.add_handler(CommandHandler(["stop", "end", "skip", "next", "pause", "resume"], stop_command))
