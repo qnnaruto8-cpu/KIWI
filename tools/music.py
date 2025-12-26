@@ -1,115 +1,133 @@
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler
 from telegram.constants import ParseMode, ChatAction
 
-# Import hamara Naya Controller aur Engine
 from tools.controller import process_stream
 from tools.stream import stop_stream
+# 🔥 Import Global Dictionaries from stream
+from tools.stream import LAST_MSG_ID, QUEUE_MSG_ID 
+from config import OWNER_NAME 
 
-# --- PLAY COMMAND (/play) ---
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
     
-    # 1. Check karo user ne gaane ka naam diya hai ya nahi
+    try: await update.message.delete()
+    except: pass
+
     if not context.args:
-        return await update.message.reply_text(
-            "❌ **Usage:** `/play [Song Name or Link]`", 
-            parse_mode=ParseMode.MARKDOWN
-        )
+        # Warning...
+        return
 
     query = " ".join(context.args)
-    
-    # 2. Searching Message (User ko batao kaam chalu hai)
-    status_msg = await update.message.reply_text(
-        f"🍭", 
-        parse_mode=ParseMode.MARKDOWN
-    )
-    
-    # Typing action dikhao
+    status_msg = await context.bot.send_message(chat.id, f"<blockquote>🔍 <b>Searching...</b>\n<code>{query}</code></blockquote>", parse_mode=ParseMode.HTML)
     await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
 
-    # 3. Controller ko kaam do (Search -> Download -> Ready)
-    # Ye function heavy lifting karega
+    # Controller Call
     error, data = await process_stream(chat.id, user.first_name, query)
 
-    # Agar koi error aaya (jaise song nahi mila)
     if error:
-        return await status_msg.edit_text(error)
+        await status_msg.edit_text(error)
+        await asyncio.sleep(5)
+        try: await status_msg.delete()
+        except: pass
+        return
 
-    # 4. Result Process karo
+    # Data Setup
     title = data["title"]
     duration = data["duration"]
     thumbnail = data["thumbnail"]
-    requested_by = data["user"]
     link = data["link"]
+    img_url = data.get("img_url", thumbnail)
     
-    # Simple Button (YouTube Link)
-    button = [[InlineKeyboardButton("📺 Watch on YouTube", url=link)]]
-    markup = InlineKeyboardMarkup(button)
+    buttons = [
+        [
+            InlineKeyboardButton("II", callback_data="music_pause"),
+            InlineKeyboardButton("▶", callback_data="music_resume"),
+            InlineKeyboardButton("‣‣I", callback_data="music_skip"),
+            InlineKeyboardButton("▢", callback_data="music_stop")
+        ],
+        [InlineKeyboardButton("📺 Watch on YouTube", url=link)]
+    ]
+    markup = InlineKeyboardMarkup(buttons)
 
-    # Case A: Gana Bajna Shuru hua (Direct Play)
+    # --- MAIN LOGIC START ---
+    
+    # 1. PURANA MSG DELETE (Agar Song 1 play ho raha hai to purana player hatao)
     if data["status"] is True:
-        text = f"""
-✅ **Started Streaming**
+        if chat.id in LAST_MSG_ID:
+            try: await context.bot.delete_message(chat.id, LAST_MSG_ID[chat.id])
+            except: pass
 
-📌 **Title:** [{title}]({link})
-⏱ **Duration:** `{duration}`
-👤 **Req By:** {requested_by}
+        caption = f"""
+<blockquote><b>✅ Started Streaming</b></blockquote>
+
+<b>📌 Title :</b> <a href="{link}">{title}</a>
+<b>⏱ Duration :</b> <code>{duration}</code>
+<b>👤 Req By :</b> {data['user']}
+
+<b>⚡ Powered By :</b> {OWNER_NAME}
 """
-        # Purana "Searching" message delete karo
-        await status_msg.delete()
+        try: await status_msg.delete()
+        except: pass
+
+        # Send New Message
+        final_msg = await context.bot.send_photo(
+            chat.id, photo=img_url, caption=caption, 
+            has_spoiler=True, reply_markup=markup, parse_mode=ParseMode.HTML
+        )
         
-        # Photo ke saath naya message bhejo
-        await context.bot.send_photo(
-            chat.id, 
-            photo=thumbnail, 
-            caption=text,
-            has_spoiler=True,
-            reply_markup=markup, 
-            parse_mode=ParseMode.MARKDOWN
-        )
+        # 🔥 ID SAVE KARO (Taaki gaana khatam hone par delete ho)
+        LAST_MSG_ID[chat.id] = final_msg.message_id
 
-    # Case B: Gana Queue mein gaya (Wait list)
+    # 2. QUEUE MSG LOGIC
     elif data["status"] is False:
-        position = data["position"]
-        text = f"""
-📝 **Added to Queue**
+        caption = f"""
+<blockquote><b>📝 Added to Queue</b></blockquote>
 
-📌 **Title:** [{title}]({link})
-🔢 **Position:** `#{position}`
-⏱ **Duration:** `{duration}`
-👤 **Req By:** {requested_by}
+<b>📌 Title :</b> <a href="{link}">{title}</a>
+<b>🔢 Position :</b> <code>#{data['position']}</code>
+<b>⏱ Duration :</b> <code>{duration}</code>
+<b>👤 Req By :</b> {data['user']}
+
+<b>⚡ Powered By :</b> {OWNER_NAME}
 """
-        await status_msg.delete()
-        await context.bot.send_photo(
-            chat.id, 
-            photo=thumbnail, 
-            caption=text,
-            has_spoiler=True,
-            reply_markup=markup, 
-            parse_mode=ParseMode.MARKDOWN
-        )
-    
-    # Case C: Assistant VC Join nahi kar paya
-    else:
-        await status_msg.edit_text("❌ **Error:** Assistant VC join nahi kar paya. Kya Assistant Group mein Admin hai?")
+        try: await status_msg.delete()
+        except: pass
 
-# --- STOP COMMAND (/stop) ---
+        queue_msg = await context.bot.send_photo(
+            chat.id, photo=img_url, caption=caption, 
+            has_spoiler=True, reply_markup=markup, parse_mode=ParseMode.HTML
+        )
+        
+        # 🔥 QUEUE ID SAVE KARO (Taaki jab ye play ho, tab ye msg delete ho)
+        # Key: ChatID + Title (Unique key to identify song)
+        key = f"{chat.id}-{title}"
+        QUEUE_MSG_ID[key] = queue_msg.message_id
+    
+    else:
+        await status_msg.edit_text("Error joining VC.")
+
+# --- STOP ---
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    try: await update.message.delete()
+    except: pass
     
-    # Stream Engine ko bolo rukne ke liye
     success = await stop_stream(chat_id)
-    
     if success:
-        await update.message.reply_text("⏹ **Music Stopped & Queue Cleared.**")
-    else:
-        await update.message.reply_text("❌ Nothing is playing to stop.")
+        # Stop hone par last player msg bhi uda do
+        if chat_id in LAST_MSG_ID:
+            try: await context.bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
+            except: pass
+            
+        m = await context.bot.send_message(chat_id, "<blockquote>⏹ <b>Stopped.</b></blockquote>", parse_mode=ParseMode.HTML)
+        await asyncio.sleep(4)
+        try: await m.delete()
+        except: pass
 
-# --- 🔌 AUTO LOADER REGISTER FUNCTION ---
-# Main.py is function ko call karega
 def register_handlers(app):
     app.add_handler(CommandHandler(["play", "p"], play_command))
-    app.add_handler(CommandHandler(["stop", "end", "skip", "pause"], stop_command))
-    print("  ✅ Music Module Loaded: /play, /stop")
+    app.add_handler(CommandHandler(["stop", "end", "skip"], stop_command))
+
