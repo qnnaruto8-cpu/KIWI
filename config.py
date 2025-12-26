@@ -88,6 +88,7 @@ confirmer = {}
 
 SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/hehe_heeeeee")
 SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/hehe_heeeeee")
+UPDATE_CHANNEL = "https://t.me/+5Vy9Hsz0DApjYzE1"
 
 if SUPPORT_CHANNEL and not re.match("(?:http|https)://", SUPPORT_CHANNEL):
     print("[WARN] - Your SUPPORT_CHANNEL url is wrong.")
