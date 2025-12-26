@@ -2,7 +2,6 @@ import asyncio
 import os
 import html 
 from pytgcalls import PyTgCalls, idle
-# ✅ FIX: MediaStream ki jagah AudioPiped use kiya (Version 3.0 Compatible)
 from pytgcalls.types import AudioPiped, Update
 from pytgcalls.types import HighQualityAudio 
 from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
@@ -19,6 +18,8 @@ QUEUE_MSG_ID = {}
 
 # --- CLIENT SETUP ---
 from pyrogram import Client
+
+# 🔥 Assistant Client (Jo Group Join Karega)
 worker_app = Client(
     "MusicWorker",
     api_id=API_ID,
@@ -26,6 +27,8 @@ worker_app = Client(
     session_string=SESSION,
     in_memory=True,
 )
+
+# 🔥 Music Player Client
 worker = PyTgCalls(worker_app)
 
 main_bot = Bot(token=BOT_TOKEN)
@@ -60,7 +63,7 @@ async def start_music_worker():
     except Exception as e:
         print(f"❌ Assistant Error: {e}")
 
-# --- 1. PLAY LOGIC (First Time Play) ---
+# --- 1. PLAY LOGIC ---
 async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail):
     safe_title = html.escape(title)
     safe_user = html.escape(user)
@@ -70,7 +73,6 @@ async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail
         return False, position
     else:
         try:
-            # ✅ FIX: AudioPiped for V3 Compatibility
             stream = AudioPiped(file_path, audio_parameters=HighQualityAudio())
             
             await worker.join_group_call(
@@ -108,7 +110,6 @@ async def stream_end_handler(client, update: Update):
         thumbnail = next_song["thumbnail"]
         
         try:
-            # ✅ FIX: Change Stream with AudioPiped
             stream = AudioPiped(file, audio_parameters=HighQualityAudio())
             await worker.change_stream(chat_id, stream)
             
@@ -159,7 +160,6 @@ async def stream_end_handler(client, update: Update):
         except Exception as e:
             print(f"❌ Auto-Play Error: {e}")
             try:
-                # ✅ FIX: Join again with AudioPiped if failed
                 await worker.join_group_call(chat_id, AudioPiped(file, audio_parameters=HighQualityAudio()))
             except:
                 await stop_stream(chat_id)
@@ -184,7 +184,6 @@ async def skip_stream(chat_id):
         user = next_song["by"]
 
         try:
-            # ✅ FIX: Skip with AudioPiped
             stream = AudioPiped(file, audio_parameters=HighQualityAudio())
             await worker.change_stream(chat_id, stream)
             
@@ -241,27 +240,19 @@ async def stop_stream(chat_id):
         await worker.leave_group_call(int(chat_id))
         await remove_active_chat(chat_id)
         await clear_queue(chat_id)
-        
         if chat_id in LAST_MSG_ID:
             try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
             except: pass
-            
         return True
     except:
         return False
 
 # --- 5. PAUSE & RESUME ---
 async def pause_stream(chat_id):
-    try:
-        await worker.pause_stream(chat_id)
-        return True
-    except:
-        return False
+    try: await worker.pause_stream(chat_id); return True
+    except: return False
 
 async def resume_stream(chat_id):
-    try:
-        await worker.resume_stream(chat_id)
-        return True
-    except:
-        return False
-        
+    try: await worker.resume_stream(chat_id); return True
+    except: return False
+            
