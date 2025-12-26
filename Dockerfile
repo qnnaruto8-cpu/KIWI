@@ -1,34 +1,20 @@
-FROM python:3.10-slim-bookworm
+# Pre-built Image (Python 3.10 + Node.js 19)
+FROM nikolaik/python-nodejs:python3.10-nodejs19-bullseye
 
-ENV PYTHONUNBUFFERED=1
-WORKDIR /app
-
-# ─── Install Dependencies (Node.js + FFmpeg + LibOpus) ───
-# Note: libopus0 aur libopus-dev bahut jaruri hain audio ke liye
-RUN apt-get update && apt-get install -y \
-    curl \
-    gnupg \
-    build-essential \
-    ffmpeg \
-    git \
-    libopus0 \
-    libopus-dev \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs \
-    && node -v \
-    && npm -v \
-    && ffmpeg -version \
+# FFmpeg install karna zaroori hai music play karne ke liye
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# ─── Python Deps ───
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# Code copy setup
+COPY . /app/
+WORKDIR /app/
 
-# ─── App Code ───
-COPY . .
+# Requirements install
+RUN pip3 install --no-cache-dir --upgrade --requirement requirements.txt
 
-# Container start command
+# --- START COMMAND ---
+# Humara main file 'main.py' hai, isliye ye command use karenge
 CMD ["python", "main.py"]
 
