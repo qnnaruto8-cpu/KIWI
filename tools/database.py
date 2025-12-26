@@ -1,90 +1,116 @@
-import pymongo
+import pymongo 
+import motor.motor_asyncio
 from config import MONGO_DB_URI
 
-# --- CONNECTION CHECK ---
+# --- 1. SYNC CONNECTION (Sirf Startup Cleanup ke liye) ---
+# Ye bot start hone se pehle purana kachra saaf karega
+try:
+    cli_sync = pymongo.MongoClient(MONGO_DB_URI)
+    db_sync = cli_sync["MusicBot_Tools"]
+    
+    # Safai Abhiyan (Active Chats Clean)
+    db_sync.active_chats.delete_many({})
+    db_sync.video_chats.delete_many({})
+    print("🧹 Active Chat Data Cleared for Fresh Start.")
+except Exception as e:
+    print(f"⚠️ Startup Cleanup Failed: {e}")
+
+# --- 2. ASYNC CONNECTION (Bot ke chalne ke liye) ---
+# Ye actual music play hone ke time kaam aayega (No Lag)
 if not MONGO_DB_URI:
     print("❌ ERROR: MONGO_DB_URI config.py mein nahi mila!")
     exit()
 
-# Connect to MongoDB
 try:
-    client = pymongo.MongoClient(MONGO_DB_URI)
-    db = client["MusicBot_Tools"]
-    print("✅ Database Connected Successfully!")
+    mongo_async = motor.motor_asyncio.AsyncIOMotorClient(MONGO_DB_URI)
+    db = mongo_async["MusicBot_Tools"]
+    
+    # Collections
+    active_db = db.active_chats
+    video_db = db.video_chats
+    queue_db = db.queues
+    
+    print("✅ Async Database Connected Successfully!")
 except Exception as e:
     print(f"❌ Database Connection Error: {e}")
     exit()
 
-# --- COLLECTIONS ---
-active_db = db.active_chats
-video_db = db.video_chats
-queue_db = db.queues
+# --- ACTIVE CHAT FUNCTIONS ---
 
-# --- ACTIVE CHAT FUNCTIONS (Async for stream.py) ---
-
-# ✅ Ye function missing tha, maine add kar diya
-def get_active_chats():
+async def get_active_chats():
     """Start hone par active chats ki list deta hai"""
-    chats = active_db.find({})
-    return [x["chat_id"] for x in chats]
+    chats = []
+    # Async loop se data nikalna padta hai
+    async for x in active_db.find({}):
+        chats.append(x["chat_id"])
+    return chats
 
 async def is_active_chat(chat_id: int):
     """Check agar Audio Play ho raha hai"""
-    data = active_db.find_one({"chat_id": chat_id})
+    data = await active_db.find_one({"chat_id": chat_id})
     return True if data else False
 
 async def add_active_chat(chat_id: int):
     """Group ko Audio Active list mein daalo"""
-    # Note: internal call mein await lagaya
+    # Duplicate check
     check = await is_active_chat(chat_id)
     if not check:
-        active_db.insert_one({"chat_id": chat_id})
+        await active_db.insert_one({"chat_id": chat_id})
 
 async def remove_active_chat(chat_id: int):
     """Group ko Audio Active list se hatao"""
-    active_db.delete_one({"chat_id": chat_id})
+    await active_db.delete_one({"chat_id": chat_id})
 
 # --- VIDEO CHAT FUNCTIONS ---
 
 async def is_active_video_chat(chat_id: int):
-    data = video_db.find_one({"chat_id": chat_id})
+    data = await video_db.find_one({"chat_id": chat_id})
     return True if data else False
 
 async def add_active_video_chat(chat_id: int):
     check = await is_active_video_chat(chat_id)
     if not check:
-        video_db.insert_one({"chat_id": chat_id})
+        await video_db.insert_one({"chat_id": chat_id})
 
 async def remove_active_video_chat(chat_id: int):
-    video_db.delete_one({"chat_id": chat_id})
+    await video_db.delete_one({"chat_id": chat_id})
 
 # --- QUEUE FUNCTIONS ---
 
 async def get_db_queue(chat_id: int):
-    data = queue_db.find_one({"chat_id": chat_id})
+    data = await queue_db.find_one({"chat_id": chat_id})
     if data:
         return data.get("queue", [])
     return []
 
 async def save_db_queue(chat_id: int, queue_list: list):
-    queue_db.update_one(
+    # Update One (Upsert=True ka matlab: nahi hai to naya banao, hai to update karo)
+    await queue_db.update_one(
         {"chat_id": chat_id},
         {"$set": {"queue": queue_list}},
         upsert=True
     )
 
 async def clear_db_queue(chat_id: int):
-    queue_db.delete_one({"chat_id": chat_id})
+    await queue_db.delete_one({"chat_id": chat_id})
+    
+# --- CACHE FUNCTIONS (Fast Play ke liye) ---
+# Jo humne /fplay ke liye discuss kiya tha
 
-# --- CLEANUP ON RESTART ---
-def clean_restart_data():
-    try:
-        active_db.delete_many({})
-        video_db.delete_many({})
-        print("🧹 Active Chat Data Cleared for Fresh Start.")
-    except Exception as e:
-        print(f"⚠️ Cleanup Error: {e}")
+async def save_cached_song(query, result):
+    collection = db["Music_Cache"]
+    exist = await collection.find_one({"query": query.lower().strip()})
+    if not exist:
+        data = {
+            "query": query.lower().strip(),
+            "data": result
+        }
+        await collection.insert_one(data)
 
-# Run Cleanup
-clean_restart_data()
+async def get_cached_song(query):
+    collection = db["Music_Cache"]
+    result = await collection.find_one({"query": query.lower().strip()})
+    if result:
+        return result["data"]
+    return None
 
