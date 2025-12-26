@@ -21,6 +21,7 @@ from tts import generate_voice
 
 # ✅ Music Assistant Import
 from tools.stream import start_music_worker
+import tools.stream # ✅ Button Logic ke liye ye zaroori hai
 
 # MODULES (Removed 'grouptools')
 import admin, start, group, leaderboard, pay, bet, wordseek, chatstat, logger, events, info, tictactoe, couple
@@ -47,25 +48,13 @@ SHOP_ITEMS = {
 
 # --- 🔌 AUTO LOADER FUNCTION ---
 def load_plugins(application: Application):
-    """
-    Tools folder ke andar jitni bhi python files hain, 
-    unko auto-load karega agar unme 'register_handlers' function hua.
-    """
     plugin_dir = "tools"
-    
     if not os.path.exists(plugin_dir):
-        try:
-            os.makedirs(plugin_dir)
-            print(f"📁 Created '{plugin_dir}' directory.")
-        except:
-            pass
+        try: os.makedirs(plugin_dir); print(f"📁 Created '{plugin_dir}' directory.")
+        except: pass
         return
 
-    path_list = [
-        f for f in os.listdir(plugin_dir) 
-        if f.endswith(".py") and f != "__init__.py"
-    ]
-
+    path_list = [f for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
     print(f"🔌 Loading {len(path_list)} plugins from '{plugin_dir}'...")
 
     for file in path_list:
@@ -75,38 +64,23 @@ def load_plugins(application: Application):
             if hasattr(module, "register_handlers"):
                 module.register_handlers(application)
                 print(f"  ✅ Loaded: {module_name}")
-            else:
-                print(f"  ⚠️ Skipped: {module_name} (No 'register_handlers' found)")
         except Exception as e:
             print(f"  ❌ Failed to load {module_name}: {e}")
 
-# --- STARTUP MESSAGE FUNCTION ---
+# --- STARTUP MESSAGE ---
 async def on_startup(application: Application):
     print(f"🚀 {BOT_NAME} IS STARTING...")
-    
     print("🔵 Starting Music Assistant...")
-    try:
-        await start_music_worker()
-    except Exception as e:
-        print(f"❌ Assistant Start Failed: {e}")
+    try: await start_music_worker()
+    except Exception as e: print(f"❌ Assistant Start Failed: {e}")
 
     logger_id = get_logger_group()
     if logger_id:
         try:
             me = await application.bot.get_me()
-            username = me.username
-            txt = f"""
-<blockquote><b>{BOT_NAME}ʙᴏᴛ active 🍭</b></blockquote>
-<blockquote>
-<b>🤖 ʙᴏᴛ ɴᴀᴍᴇ :</b> {BOT_NAME}
-<b>🆔 ʙᴏᴛ ɪᴅ :</b> <code>{me.id}</code>
-<b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> @{username}
-</blockquote>
-"""
+            txt = f"<blockquote><b>{BOT_NAME}ʙᴏᴛ active 🍭</b></blockquote>\n@{me.username}"
             await application.bot.send_message(chat_id=logger_id, text=txt, parse_mode=ParseMode.HTML)
-            print("✅ Startup message sent to Logger!")
-        except Exception as e:
-            print(f"⚠️ Failed to send startup message: {e}")
+        except: pass
 
 # --- SHOP MENU ---
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -135,18 +109,45 @@ async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     codes_col.update_one({"code": code}, {"$push": {"redeemed_by": user.id}})
     await update.message.reply_text(f"🎉 Redeemed ₹{data['amount']}!")
 
-# --- CALLBACK HANDLER ---
+# --- CALLBACK HANDLER (UPDATED WITH MUSIC CONTROLS) ---
 async def callback_handler(update, context):
     q = update.callback_query
     data = q.data
     uid = q.from_user.id
+    chat_id = update.effective_chat.id
     
+    # 🔥 1. MUSIC PLAYER CONTROLS (Pause/Skip/Stop)
+    if data.startswith("music_"):
+        await q.answer()
+        action = data.split("_")[1]
+        
+        if action == "pause":
+            await tools.stream.pause_stream(chat_id)
+            await q.message.reply_text("II Stream Paused", quote=True)
+        elif action == "resume":
+            await tools.stream.resume_stream(chat_id)
+            await q.message.reply_text("▶ Stream Resumed", quote=True)
+        elif action == "skip":
+            await tools.stream.skip_stream(chat_id)
+            await q.message.reply_text("⏭ Skipped", quote=True)
+        elif action == "stop":
+            await tools.stream.stop_stream(chat_id)
+            await q.message.delete()
+            await q.message.reply_text("⏹ Stream Stopped", quote=True)
+        return
+
+    # 🔥 2. FORCE CLOSE BUTTON (Error Msg Delete)
+    if data == "force_close":
+        try: await q.message.delete()
+        except: await q.answer("❌ Delete nahi kar sakta!", show_alert=True)
+        return
+
+    # --- STANDARD HANDLERS ---
     if data in ["close_log", "close_ping"]:
         try: await q.message.delete()
         except: pass
         return
 
-    # Start Menu Handlers
     if data == "back_home":
         await q.answer()
         await start.start_callback(update, context)
@@ -173,7 +174,6 @@ async def callback_handler(update, context):
         await start.start_callback(update, context)
         return
 
-    # Module Handlers
     if data.startswith("admin_"):
         await admin.admin_callback(update, context)
         return
@@ -235,9 +235,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 0. DM SPAM PROTECTION
     if chat.type == "private":
         spam_status = dmspam.check_spam(user.id)
-        if spam_status == "BLOCKED":
-            print(f"🚫 Ignoring Spam from {user.first_name}") 
-            return 
+        if spam_status == "BLOCKED": return 
         elif spam_status == "NEW_BLOCK":
             await update.message.reply_text("🚫 **Spam mat kar bhai!**\n5 minute ke liye block kiya ja raha hai.")
             return 
@@ -255,7 +253,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if status == "BLOCKED":
             await update.message.reply_text(f"🚫 **Spam Detected!**\n{user.first_name}, blocked for 8 mins.")
             return
-        elif status == False: return
 
     # 3. STATS
     update_username(user.id, user.first_name)
@@ -290,8 +287,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_chat_action(chat_id=chat.id, action="typing")
         
-        # 🔥 YAHAN CHANGE HAI (ASYNC CALL + REACTION OBJECT PASSED)
-        # Ab AI Reaction + Text dono dega
+        # 🔥 AI Response + Reaction (Async)
         ai_reply = await get_yuki_response(user.id, text, user.first_name, update.message)
 
         if wants_voice:
@@ -304,11 +300,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await update.message.reply_voice(voice=voice_file)
                     os.remove(audio_path)
                     return
-                except Exception as e:
-                    print(f"Voice Send Error: {e}")
-                    await update.message.reply_text(ai_reply)
-            else:
-                await update.message.reply_text(ai_reply)
+                except: await update.message.reply_text(ai_reply)
+            else: await update.message.reply_text(ai_reply)
         else:
             await update.message.reply_text(ai_reply)
 
@@ -317,24 +310,20 @@ def main():
     keep_alive()
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
     
-    # --- A. EXISTING HANDLERS ---
+    # Handlers
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("admin", admin.admin_panel))
-    
     app.add_handler(CommandHandler("info", info.user_info))
     app.add_handler(CommandHandler("love", info.love_calculator))
     app.add_handler(CommandHandler("stupid", info.stupid_meter))
     app.add_handler(CommandHandler("couple", couple.couple_check))
-    
     app.add_handler(CommandHandler("bal", check_balance))
     app.add_handler(CommandHandler("redeem", redeem_code))
     app.add_handler(CommandHandler("shop", shop_menu))
-    
     app.add_handler(CommandHandler("top", leaderboard.user_leaderboard))
     app.add_handler(CommandHandler("ranking", group.ranking))
     app.add_handler(CommandHandler("stats", logger.stats_bot))
     app.add_handler(CommandHandler("ping", logger.ping_bot))
-    
     app.add_handler(CommandHandler("bet", bet.bet_menu))
     app.add_handler(CommandHandler("new", wordseek.start_wordseek))
     app.add_handler(CommandHandler("wordgrid", wordgrid.start_wordgrid))
@@ -343,19 +332,16 @@ def main():
     app.add_handler(CommandHandler("invest", group.invest))
     app.add_handler(CommandHandler("sell", group.sell_shares))
     app.add_handler(CommandHandler("topinvest", group.top_investors))
-    
     app.add_handler(CommandHandler("bank", bank.bank_info))
     app.add_handler(CommandHandler("deposit", bank.deposit))
     app.add_handler(CommandHandler("withdraw", bank.withdraw))
     app.add_handler(CommandHandler("loan", bank.take_loan))
     app.add_handler(CommandHandler("payloan", bank.repay_loan))
-    
     app.add_handler(CommandHandler("pay", pay.pay_user))
     app.add_handler(CommandHandler("rob", pay.rob_user))
     app.add_handler(CommandHandler("kill", pay.kill_user))
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
-    
     app.add_handler(CommandHandler("time", livetime.start_live_time))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
 
@@ -369,10 +355,8 @@ def main():
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
-    # --- B. NEW MODULES (TOOLS FOLDER - AUTO LOAD) ---
     load_plugins(app)
 
-    # --- C. MESSAGE HANDLER (LAST PRIORITY) ---
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
     
     print(f"🚀 {BOT_NAME} STARTED SUCCESSFULLY!")
@@ -380,4 +364,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+                                        
