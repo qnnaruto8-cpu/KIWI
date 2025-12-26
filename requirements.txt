@@ -1,6 +1,7 @@
 python-telegram-bot[job-queue]
 APScheduler
 pymongo
+motor
 dnspython
 flask
 google-generativeai
