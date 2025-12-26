@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode, ChatAction
 import time
 import asyncio
+import html
 
 # Import hamara Naya Controller aur Engine
 from tools.controller import process_stream
@@ -40,6 +41,56 @@ def validate_thumbnail_url(url):
     
     return None
 
+# --- HTML ESCAPE HELPER ---
+def escape_html(text):
+    """HTML entities ko escape karo"""
+    if not text:
+        return ""
+    return html.escape(str(text))
+
+# --- SAFE HTML FORMATTING ---
+def format_music_message(title, link, duration, requested_by, status_type="started", position=None):
+    """Safely format music message with HTML"""
+    # Escape all user inputs
+    safe_title = escape_html(title)
+    safe_link = escape_html(link) if link else "#"
+    safe_duration = escape_html(duration)
+    safe_requested_by = escape_html(requested_by)
+    
+    current_time = time.strftime("%H:%M:%S")
+    
+    if status_type == "started":
+        message = f"""
+🎵 <b>Streaming Started</b>
+
+📌 <b>Title:</b> <a href="{safe_link}">{safe_title}</a>
+⏱ <b>Duration:</b> <code>{safe_duration}</code>
+🎧 <b>Audio Quality:</b> <code>128 kbps</code>
+👤 <b>Requested By:</b> {safe_requested_by}
+🕐 <b>Playing Since:</b> <code>{current_time}</code>
+
+━━━━━━━━━━━━━━━━━━
+
+✨ Powered by <b>{OWNER_NAME}</b>
+"""
+    elif status_type == "queued":
+        safe_position = escape_html(str(position))
+        message = f"""
+📝 <b>Added to Queue</b>
+
+📌 <b>Title:</b> <a href="{safe_link}">{safe_title}</a>
+🔢 <b>Position:</b> <code>#{safe_position}</code>
+⏱ <b>Duration:</b> <code>{safe_duration}</code>
+👤 <b>Requested By:</b> {safe_requested_by}
+🕐 <b>Requested At:</b> <code>{current_time}</code>
+
+━━━━━━━━━━━━━━━━━━
+
+✨ Powered by <b>{OWNER_NAME}</b>
+"""
+    
+    return message.strip()
+
 # --- PLAY COMMAND (/play) ---
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -54,8 +105,8 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         # Usage message bhejo aur delete ho jaye
         msg = await update.message.reply_text(
-            "❌ **Usage:** `/play [Song Name or Link]`", 
-            parse_mode=ParseMode.MARKDOWN
+            "❌ <b>Usage:</b> <code>/play [Song Name or Link]</code>", 
+            parse_mode=ParseMode.HTML
         )
         # 5 seconds baad delete
         context.job_queue.run_once(
@@ -68,8 +119,8 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # ✅ SEARCHING MESSAGE - Auto delete wala
     status_msg = await update.message.reply_text(
-        f"🔎 **Searching:** `{query}`...", 
-        parse_mode=ParseMode.MARKDOWN
+        f"🔎 <b>Searching:</b> <code>{escape_html(query)}</code>...", 
+        parse_mode=ParseMode.HTML
     )
     
     # Auto delete ka job schedule karo
@@ -85,7 +136,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if error:
         # Error message bhi auto delete ho
-        await status_msg.edit_text(error)
+        await status_msg.edit_text(f"❌ {error}")
         context.job_queue.run_once(
             lambda ctx: auto_delete_message(ctx, chat.id, status_msg.message_id, 5),
             when=5
@@ -114,22 +165,18 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     markup = InlineKeyboardMarkup(buttons)
 
-    if data.get("status") is True:
-        text = f"""
-<blockquote><b>🎵 Streaming Started</b></blockquote>
-
-<blockquote>
-<b>📌 Title:</b> <a href="{link}">{title}</a>
-<b>⏱ Duration:</b> <code>{duration}</code>
-<b>🎧 Audio Quality:</b> <code>128 kbps</code>
-<b>👤 Requested By:</b> {requested_by}
-<b>🕐 Playing Since:</b> <code>{time.strftime('%H:%M:%S')}</code>
-</blockquote>
-
-<blockquote>━━━━━━━━━━━━━━━━━━</blockquote>
-
-<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
-"""
+    status = data.get("status")
+    
+    if status is True:
+        # ✅ FORMATTED MESSAGE BANAO
+        message_text = format_music_message(
+            title=title,
+            link=link,
+            duration=duration,
+            requested_by=requested_by,
+            status_type="started"
+        )
+        
         # Searching message delete karo
         try:
             await status_msg.delete()
@@ -152,8 +199,8 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 result_msg = await context.bot.send_photo(
                     chat.id, 
                     photo=valid_thumbnail, 
-                    caption=text, 
-                    reply_markup=markup,  # Track selection buttons
+                    caption=message_text, 
+                    reply_markup=markup,
                     parse_mode=ParseMode.HTML,
                     has_spoiler=True
                 )
@@ -162,7 +209,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Fallback to text message
                 result_msg = await context.bot.send_message(
                     chat.id,
-                    text=text,
+                    text=message_text,
                     reply_markup=markup,
                     parse_mode=ParseMode.HTML
                 )
@@ -170,7 +217,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # No thumbnail, send text only
             result_msg = await context.bot.send_message(
                 chat.id,
-                text=text,
+                text=message_text,
                 reply_markup=markup,
                 parse_mode=ParseMode.HTML
             )
@@ -178,27 +225,24 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Player control message अलग से
         player_msg = await context.bot.send_message(
             chat.id,
-            text="🎛 **Player Controls**",
-            reply_markup=player_markup
+            text="🎛 <b>Player Controls</b>",
+            reply_markup=player_markup,
+            parse_mode=ParseMode.HTML
         )
 
-    elif data.get("status") is False:
+    elif status is False:
         position = data.get("position", 1)
-        text = f"""
-<blockquote><b>📝 Added to Queue</b></blockquote>
-
-<blockquote>
-<b>📌 Title:</b> <a href="{link}">{title}</a>
-<b>🔢 Position:</b> <code>#{position}</code>
-<b>⏱ Duration:</b> <code>{duration}</code>
-<b>👤 Requested By:</b> {requested_by}
-<b>🕐 Requested At:</b> <code>{time.strftime('%H:%M:%S')}</code>
-</blockquote>
-
-<blockquote>━━━━━━━━━━━━━━━━━━</blockquote>
-
-<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
-"""
+        
+        # ✅ FORMATTED MESSAGE BANAO
+        message_text = format_music_message(
+            title=title,
+            link=link,
+            duration=duration,
+            requested_by=requested_by,
+            status_type="queued",
+            position=position
+        )
+        
         # Searching message delete karo
         try:
             await status_msg.delete()
@@ -211,7 +255,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 result_msg = await context.bot.send_photo(
                     chat.id, 
                     photo=valid_thumbnail, 
-                    caption=text, 
+                    caption=message_text, 
                     reply_markup=markup, 
                     parse_mode=ParseMode.HTML,
                     has_spoiler=True
@@ -220,21 +264,21 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 print(f"⚠️ Photo send error: {photo_error}")
                 result_msg = await context.bot.send_message(
                     chat.id,
-                    text=text,
+                    text=message_text,
                     reply_markup=markup,
                     parse_mode=ParseMode.HTML
                 )
         else:
             result_msg = await context.bot.send_message(
                 chat.id,
-                text=text,
+                text=message_text,
                 reply_markup=markup,
                 parse_mode=ParseMode.HTML
             )
     
     else:
-        error_msg = "❌ **Error:** Assistant VC join nahi kar paya."
-        await status_msg.edit_text(error_msg)
+        error_msg = "❌ <b>Error:</b> Assistant VC join nahi kar paya."
+        await status_msg.edit_text(error_msg, parse_mode=ParseMode.HTML)
         # Error message bhi delete ho jaye
         context.job_queue.run_once(
             lambda ctx: auto_delete_message(ctx, chat.id, status_msg.message_id, 5),
@@ -258,22 +302,22 @@ async def music_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             
             if action == "Pause":
                 success = await pause_stream(int(chat_id))
-                response_text = f"⏸ **Paused** by {query.from_user.first_name}" if success else "❌ Failed to pause"
+                response_text = f"⏸ <b>Paused</b> by {escape_html(query.from_user.first_name)}" if success else "❌ Failed to pause"
                 
             elif action == "Resume":
                 success = await resume_stream(int(chat_id))
-                response_text = f"▶️ **Resumed** by {query.from_user.first_name}" if success else "❌ Failed to resume"
+                response_text = f"▶️ <b>Resumed</b> by {escape_html(query.from_user.first_name)}" if success else "❌ Failed to resume"
                 
             elif action == "Skip":
                 success, _ = await skip_stream(int(chat_id))
-                response_text = f"⏭ **Skipped** by {query.from_user.first_name}" if success else "❌ Failed to skip"
+                response_text = f"⏭ <b>Skipped</b> by {escape_html(query.from_user.first_name)}" if success else "❌ Failed to skip"
                 
             elif action == "Stop":
                 success = await stop_stream(int(chat_id))
-                response_text = f"⏹ **Stopped** by {query.from_user.first_name}" if success else "❌ Failed to stop"
+                response_text = f"⏹ <b>Stopped</b> by {escape_html(query.from_user.first_name)}" if success else "❌ Failed to stop"
             
             # Edit message aur delete job schedule karo
-            await query.edit_message_text(response_text)
+            await query.edit_message_text(response_text, parse_mode=ParseMode.HTML)
             
             # Response ko bhi 3 seconds baad delete karo
             context.job_queue.run_once(
@@ -286,7 +330,7 @@ async def music_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     elif data.startswith("MusicStream"):
         # Audio/Video stream selection
-        await query.edit_message_text("🎵 Stream selection processed...")
+        await query.edit_message_text("🎵 Stream selection processed...", parse_mode=ParseMode.HTML)
         # Ye bhi delete ho jaye
         context.job_queue.run_once(
             lambda ctx: ctx.bot.delete_message(
@@ -321,9 +365,13 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if success:
         text = f"""
-<blockquote><b>⏹ Music Stopped</b></blockquote>
-<blockquote>Queue cleared by {update.effective_user.first_name}</blockquote>
-<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
+⏹ <b>Music Stopped</b>
+
+Queue cleared by {escape_html(update.effective_user.first_name)}
+
+━━━━━━━━━━━━━━━━━━
+
+✨ Powered by <b>{OWNER_NAME}</b>
 """
         msg = await update.message.reply_text(text, parse_mode=ParseMode.HTML)
         # 5 seconds baad delete
@@ -349,9 +397,13 @@ async def pause_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if success:
         text = f"""
-<blockquote><b>⏸ Playback Paused</b></blockquote>
-<blockquote>Action by {update.effective_user.first_name}</blockquote>
-<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
+⏸ <b>Playback Paused</b>
+
+Action by {escape_html(update.effective_user.first_name)}
+
+━━━━━━━━━━━━━━━━━━
+
+✨ Powered by <b>{OWNER_NAME}</b>
 """
     else:
         text = "❌ Failed to pause playback"
@@ -373,9 +425,13 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if success:
         text = f"""
-<blockquote><b>▶️ Playback Resumed</b></blockquote>
-<blockquote>Action by {update.effective_user.first_name}</blockquote>
-<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
+▶️ <b>Playback Resumed</b>
+
+Action by {escape_html(update.effective_user.first_name)}
+
+━━━━━━━━━━━━━━━━━━
+
+✨ Powered by <b>{OWNER_NAME}</b>
 """
     else:
         text = "❌ Failed to resume playback"
@@ -396,17 +452,27 @@ async def skip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     success, next_song = await skip_stream(chat_id)
     
     if success and next_song:
+        safe_title = escape_html(next_song.get('title', 'Next Song'))
         text = f"""
-<blockquote><b>⏭ Song Skipped</b></blockquote>
-<blockquote>Now playing: {next_song.get('title', 'Next Song')}</blockquote>
-<blockquote>Action by {update.effective_user.first_name}</blockquote>
-<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
+⏭ <b>Song Skipped</b>
+
+Now playing: {safe_title}
+
+Action by {escape_html(update.effective_user.first_name)}
+
+━━━━━━━━━━━━━━━━━━
+
+✨ Powered by <b>{OWNER_NAME}</b>
 """
     elif success:
         text = f"""
-<blockquote><b>⏭ Song Skipped</b></blockquote>
-<blockquote>Action by {update.effective_user.first_name}</blockquote>
-<blockquote>✨ Powered by <b>{OWNER_NAME}</b></blockquote>
+⏭ <b>Song Skipped</b>
+
+Action by {escape_html(update.effective_user.first_name)}
+
+━━━━━━━━━━━━━━━━━━
+
+✨ Powered by <b>{OWNER_NAME}</b>
 """
     else:
         text = "❌ Failed to skip or queue is empty"
