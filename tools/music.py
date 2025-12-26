@@ -84,7 +84,8 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_photo(
             chat.id, 
             photo=thumbnail, 
-            caption=text, 
+            caption=text,
+            has_spoiler=True,
             reply_markup=markup, 
             parse_mode=ParseMode.MARKDOWN
         )
