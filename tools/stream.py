@@ -2,7 +2,6 @@ import asyncio
 import os
 import html 
 from pytgcalls import PyTgCalls, idle
-# ✅ FIX: MediaStream ki jagah AudioPiped use kiya (Version 3.0 Compatible)
 from pytgcalls.types import AudioPiped, Update
 from pytgcalls.types import HighQualityAudio 
 from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
@@ -60,43 +59,75 @@ async def start_music_worker():
     except Exception as e:
         print(f"❌ Assistant Error: {e}")
 
-# --- 1. PLAY LOGIC (First Time Play) ---
+# --- 1. PLAY LOGIC (Force Join Fix) ---
 async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail):
     safe_title = html.escape(title)
     safe_user = html.escape(user)
 
-    if await is_active_chat(chat_id):
-        position = await put_queue(chat_id, file_path, safe_title, duration, safe_user, link, thumbnail)
-        return False, position
-    else:
+    # Stream Object Prepare karo
+    stream = AudioPiped(file_path, audio_parameters=HighQualityAudio())
+
+    # 🔥 DIRECT JOIN LOGIC (No Database Trust)
+    try:
+        # Check karo agar pehle se connected hai
+        is_connected = False
         try:
-            # ✅ FIX: AudioPiped for V3 Compatibility
-            stream = AudioPiped(file_path, audio_parameters=HighQualityAudio())
+            for call in worker.active_calls:
+                if call.chat_id == chat_id:
+                    is_connected = True
+                    break
+        except: pass
+
+        if is_connected:
+            # Agar sach me connected hai -> Queue
+            position = await put_queue(chat_id, file_path, safe_title, duration, safe_user, link, thumbnail)
+            return False, position
+        else:
+            # Agar connected nahi hai -> Join (Play)
+            try: await worker.leave_group_call(int(chat_id))
+            except: pass
+            
+            await asyncio.sleep(0.2) 
             
             await worker.join_group_call(
                 int(chat_id),
                 stream,
             )
-            
             await add_active_chat(chat_id)
             await put_queue(chat_id, file_path, safe_title, duration, safe_user, link, thumbnail)
             return True, 0
-        except Exception as e:
-            print(f"❌ Play Error: {e}")
+
+    except Exception as e:
+        # Error Handling
+        err_str = str(e).lower()
+        if "no active group call" in err_str:
+            return None, "❌ **Voice Chat is OFF!**"
+        elif "already" in err_str:
+             # Ghost Connection Fix
+             try:
+                await worker.leave_group_call(int(chat_id))
+                await asyncio.sleep(1)
+                await worker.join_group_call(int(chat_id), stream)
+                await add_active_chat(chat_id)
+                await put_queue(chat_id, file_path, safe_title, duration, safe_user, link, thumbnail)
+                return True, 0
+             except Exception as final_e:
+                return None, f"⚠️ Error: {final_e}"
+        else:
             return None, str(e)
 
-# --- 2. AUTO PLAY HANDLER ---
+# --- 2. AUTO PLAY HANDLER (Next Song Fix) ---
 @worker.on_stream_end()
 async def stream_end_handler(client, update: Update):
     chat_id = update.chat_id
     print(f"🔄 Stream Ended in {chat_id}")
 
+    # Old Message Delete
     if chat_id in LAST_MSG_ID:
-        try:
-            await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
-        except:
-            pass 
+        try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
+        except: pass 
     
+    # Next Song Nikalo
     next_song = await pop_queue(chat_id)
 
     if next_song:
@@ -107,15 +138,21 @@ async def stream_end_handler(client, update: Update):
         link = next_song["link"]
         thumbnail = next_song["thumbnail"]
         
+        # 🔥 ROBUST NEXT PLAY LOGIC
         try:
-            # ✅ FIX: Change Stream with AudioPiped
             stream = AudioPiped(file, audio_parameters=HighQualityAudio())
-            await worker.change_stream(chat_id, stream)
             
-            if len(title) > 30:
-                display_title = title[:30] + "..."
-            else:
-                display_title = title
+            # Try 1: Change Stream (Normal transition)
+            try:
+                await worker.change_stream(chat_id, stream)
+            except Exception as e:
+                # Try 2: Force Join (Agar glitch ki wajah se nikal gaya tha)
+                print(f"⚠️ Change Stream Failed ({e}), Trying Force Join...")
+                await worker.join_group_call(chat_id, stream)
+
+            # UI Update
+            if len(title) > 30: display_title = title[:30] + "..."
+            else: display_title = title
             
             bar_display = get_progress_bar(duration)
 
@@ -153,18 +190,15 @@ async def stream_end_handler(client, update: Update):
                 reply_markup=InlineKeyboardMarkup(buttons),
                 parse_mode=ParseMode.HTML
             )
-            
             LAST_MSG_ID[chat_id] = msg.message_id
 
         except Exception as e:
-            print(f"❌ Auto-Play Error: {e}")
-            try:
-                # ✅ FIX: Join again with AudioPiped if failed
-                await worker.join_group_call(chat_id, AudioPiped(file, audio_parameters=HighQualityAudio()))
-            except:
-                await stop_stream(chat_id)
+            print(f"❌ Auto-Play Critical Error: {e}")
+            await stop_stream(chat_id)
 
     else:
+        # Queue Empty -> Stop
+        print(f"✅ Queue Empty for {chat_id}, Leaving VC.")
         await stop_stream(chat_id)
 
 # --- 3. SKIP LOGIC ---
@@ -184,14 +218,11 @@ async def skip_stream(chat_id):
         user = next_song["by"]
 
         try:
-            # ✅ FIX: Skip with AudioPiped
             stream = AudioPiped(file, audio_parameters=HighQualityAudio())
             await worker.change_stream(chat_id, stream)
             
-            if len(title) > 30:
-                display_title = title[:30] + "..."
-            else:
-                display_title = title
+            if len(title) > 30: display_title = title[:30] + "..."
+            else: display_title = title
 
             bar_display = get_progress_bar(duration)
 
@@ -241,27 +272,22 @@ async def stop_stream(chat_id):
         await worker.leave_group_call(int(chat_id))
         await remove_active_chat(chat_id)
         await clear_queue(chat_id)
-        
         if chat_id in LAST_MSG_ID:
             try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
             except: pass
-            
         return True
-    except:
-        return False
+    except: return False
 
 # --- 5. PAUSE & RESUME ---
 async def pause_stream(chat_id):
     try:
         await worker.pause_stream(chat_id)
         return True
-    except:
-        return False
+    except: return False
 
 async def resume_stream(chat_id):
     try:
         await worker.resume_stream(chat_id)
         return True
-    except:
-        return False
-        
+    except: return False
+
