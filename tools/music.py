@@ -55,7 +55,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Searching Message
     status_msg = await context.bot.send_message(
         chat.id,
-        f"🫀",
+        f"🍭",
         parse_mode=ParseMode.HTML
     )
     await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
