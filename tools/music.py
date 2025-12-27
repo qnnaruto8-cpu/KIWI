@@ -8,7 +8,8 @@ from telegram.error import TelegramError
 
 # Imports
 from tools.controller import process_stream
-from tools.stream import stop_stream, skip_stream, pause_stream, resume_stream, worker
+# ✅ FIX: 'worker' ki jagah 'worker_app' import kiya (Client joining ke liye)
+from tools.stream import stop_stream, skip_stream, pause_stream, resume_stream, worker, worker_app
 from tools.stream import LAST_MSG_ID, QUEUE_MSG_ID
 from config import OWNER_NAME, ASSISTANT_ID, INSTAGRAM_LINK, BOT_NAME
 
@@ -73,22 +74,20 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
         except: pass
 
-        # Step B: Try to Join VC
+        # Step B: Try to Join VC (Group Join Fix)
         try:
             invite_link = await context.bot.export_chat_invite_link(chat.id)
-            await worker.join_chat(invite_link)
+            # ✅ IMPORTANT FIX: 'worker_app' use kiya (Client), 'worker' nahi (PyTgCalls)
+            await worker_app.join_chat(invite_link)
         except Exception as e:
             err_str = str(e).lower()
             if "already" in err_str or "participant" in err_str:
                 pass 
             else:
+                # Sirf tab error dikhao jab sach mein join na ho paye
                 print(f"⚠️ Join Error: {e}")
-                await status_msg.edit_text(
-                    "<blockquote>❌ <b>ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ɪs ᴏғғ</b></blockquote>\n\n<b>Please Turn ON the Voice Chat first!</b>\n<i>Video Chat / Live Stream start karo.</i>",
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑 ᴄʟᴏsᴇ", callback_data="force_close")]])
-                )
-                return
+                # Note: Agar yahan error aaye to zaruri nahi VC off ho, shayad link expire ho
+                # Isliye hum ignore karke aage badhenge, controller handle karega
 
     except Exception as e:
         print(f"Main Logic Error: {e}")
