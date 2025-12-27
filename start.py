@@ -94,23 +94,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ┆◍ ʜєʏ, {first_name} 🥀
 ┆◍ ɪ ᴧϻ {bot_name}
 └────────────────────•
-```
+<pre>
 ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. 
 ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ
 ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
-```
-```
+<pre>
+<pre>
 ╭─ ⚙️ SYSTEM STATUS
 │ ➥ UPTIME: {uptime}
 │ ➥ SERVER STORAGE: {disk:.1f}%
 │ ➥ CPU LOAD: {cpu:.1f}%
 │ ➥ RAM CONSUMPTION: {ram:.1f}%
 ╰───────────────
-```
+<pre>
 •──────────────────────•
-```
+<pre>
 ✦ ᴘᴏᴡєʀєᴅ ʙʏ © BOSS JI
-```
+<pre>
 """
 
     # Register & Log
@@ -206,11 +206,11 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ┆◍ ʜєʏ, {first_name} 🥀
 ┆◍ ɪ ᴧϻ {context.bot.first_name}
 └────────────────────•
-```
+<pre>
 ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. 
 ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ
 ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
-```
+<pre>
 <pre>
 ╭─ ⚙️ SYSTEM STATUS
 │ ➥ UPTIME: {uptime}
@@ -220,9 +220,9 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╰───────────────
 </pre>
 •──────────────────────•
-```
+<pre>
 ✦ᴘᴏᴡєʀєᴅ ʙʏ » BOSS JI 
-```
+<pre>
 """
         keyboard = [
             [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{bot_username}?startgroup=true")],
