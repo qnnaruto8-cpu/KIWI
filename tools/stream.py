@@ -9,7 +9,7 @@ from telegram.constants import ParseMode
 
 # Configs
 from config import API_ID, API_HASH, SESSION, BOT_TOKEN, OWNER_NAME, LOG_GROUP_ID, INSTAGRAM_LINK
-from tools.queue import put_queue, pop_queue, clear_queue
+from tools.queue import put_queue, pop_queue, clear_queue, get_queue
 from tools.database import is_active_chat, add_active_chat, remove_active_chat
 
 # --- GLOBAL DICTIONARIES ---
@@ -121,22 +121,43 @@ async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail
 async def stream_end_handler(client, update: Update):
     chat_id = update.chat_id
     print(f"🔄 Stream Ended in {chat_id}")
+    
+    # DEBUG: Queue status check
+    queue = await get_queue(chat_id)
+    print(f"🔍 DEBUG: Queue length after stream end: {len(queue) if queue else 0}")
 
     # Old Message Delete
     if chat_id in LAST_MSG_ID:
-        try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
-        except: pass 
+        try: 
+            await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
+        except: 
+            pass 
     
-    # Next Song Nikalo
-    next_song = await pop_queue(chat_id)
-
-    if next_song:
+    # Thoda wait karo
+    await asyncio.sleep(2)
+    
+    # ✅ FIXED LOGIC: Pehle current song ko queue se hatao
+    # Current song jo abhi khatam hua usko pop karo
+    current_song_removed = await pop_queue(chat_id)
+    
+    if not current_song_removed:
+        print(f"⚠️ No song removed from queue for {chat_id}")
+    
+    # Ab next song check karo
+    queue = await get_queue(chat_id)
+    
+    if queue and len(queue) > 0:
+        # Ab queue ka pehla song next song hai
+        next_song = queue[0]
+        
         file = next_song["file"]
         title = next_song["title"] 
         duration = next_song["duration"]
         user = next_song["by"] 
         link = next_song["link"]
         thumbnail = next_song["thumbnail"]
+        
+        print(f"🎵 Next Song: {title}")
         
         # 🔥 ROBUST NEXT PLAY LOGIC
         try:
@@ -145,14 +166,27 @@ async def stream_end_handler(client, update: Update):
             # Try 1: Change Stream (Normal transition)
             try:
                 await worker.change_stream(chat_id, stream)
+                print(f"✅ Stream Changed Successfully in {chat_id}")
             except Exception as e:
                 # Try 2: Force Join (Agar glitch ki wajah se nikal gaya tha)
-                print(f"⚠️ Change Stream Failed ({e}), Trying Force Join...")
+                print(f"⚠️ Change Stream Failed ({e}), Trying Fresh Join...")
+                
+                # Pehle leave karo
+                try:
+                    await worker.leave_group_call(chat_id)
+                    await asyncio.sleep(1)
+                except:
+                    pass
+                
+                # Phir fresh join
                 await worker.join_group_call(chat_id, stream)
+                print(f"✅ Fresh Join Successful in {chat_id}")
 
             # UI Update
-            if len(title) > 30: display_title = title[:30] + "..."
-            else: display_title = title
+            if len(title) > 30: 
+                display_title = title[:30] + "..."
+            else: 
+                display_title = title
             
             bar_display = get_progress_bar(duration)
 
@@ -182,6 +216,13 @@ async def stream_end_handler(client, update: Update):
 
 <blockquote><b>⚡ ᴘᴏᴡᴇʀᴇᴅ ʙʏ :</b> {OWNER_NAME}</blockquote>
 """
+            # Purana message delete karo
+            if chat_id in LAST_MSG_ID:
+                try:
+                    await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
+                except:
+                    pass
+            
             msg = await main_bot.send_photo(
                 chat_id,
                 photo=thumbnail,
@@ -204,12 +245,25 @@ async def stream_end_handler(client, update: Update):
 # --- 3. SKIP LOGIC ---
 async def skip_stream(chat_id):
     if chat_id in LAST_MSG_ID:
-        try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
-        except: pass
+        try: 
+            await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
+        except: 
+            pass
 
-    next_song = await pop_queue(chat_id)
+    # Pehle current song hatao
+    current_song = await pop_queue(chat_id)
+    
+    if not current_song:
+        print(f"⚠️ No current song to skip in {chat_id}")
+        await stop_stream(chat_id)
+        return False
 
-    if next_song:
+    # Ab next song check karo
+    queue = await get_queue(chat_id)
+    
+    if queue and len(queue) > 0:
+        next_song = queue[0]
+        
         file = next_song["file"]
         title = next_song["title"]
         link = next_song["link"]
@@ -221,8 +275,10 @@ async def skip_stream(chat_id):
             stream = AudioPiped(file, audio_parameters=HighQualityAudio())
             await worker.change_stream(chat_id, stream)
             
-            if len(title) > 30: display_title = title[:30] + "..."
-            else: display_title = title
+            if len(title) > 30: 
+                display_title = title[:30] + "..."
+            else: 
+                display_title = title
 
             bar_display = get_progress_bar(duration)
 
@@ -253,16 +309,22 @@ async def skip_stream(chat_id):
 <blockquote><b>⚡ ᴘᴏᴡᴇʀᴇᴅ ʙʏ :</b> {OWNER_NAME}</blockquote>
 """
             msg = await main_bot.send_photo(
-                chat_id, photo=thumbnail, caption=caption,
-                has_spoiler=True, reply_markup=InlineKeyboardMarkup(buttons),
+                chat_id, 
+                photo=thumbnail, 
+                caption=caption,
+                has_spoiler=True, 
+                reply_markup=InlineKeyboardMarkup(buttons),
                 parse_mode=ParseMode.HTML
             )
             LAST_MSG_ID[chat_id] = msg.message_id
             return True 
         except Exception as e:
             print(f"Skip Error: {e}")
+            # Skip fail hua toh stop karo
+            await stop_stream(chat_id)
             return False
     else:
+        # Queue empty, stop karo
         await stop_stream(chat_id)
         return False
 
@@ -273,21 +335,38 @@ async def stop_stream(chat_id):
         await remove_active_chat(chat_id)
         await clear_queue(chat_id)
         if chat_id in LAST_MSG_ID:
-            try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
-            except: pass
+            try: 
+                await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
+            except: 
+                pass
         return True
-    except: return False
+    except Exception as e:
+        print(f"Stop Stream Error: {e}")
+        return False
 
 # --- 5. PAUSE & RESUME ---
 async def pause_stream(chat_id):
     try:
         await worker.pause_stream(chat_id)
         return True
-    except: return False
+    except Exception as e:
+        print(f"Pause Error: {e}")
+        return False
 
 async def resume_stream(chat_id):
     try:
         await worker.resume_stream(chat_id)
         return True
-    except: return False
+    except Exception as e:
+        print(f"Resume Error: {e}")
+        return False
 
+# --- 6. GET CURRENT PLAYING ---
+async def get_current_playing(chat_id):
+    """
+    Current playing song ka info deta hai
+    """
+    queue = await get_queue(chat_id)
+    if queue and len(queue) > 0:
+        return queue[0]
+    return None
