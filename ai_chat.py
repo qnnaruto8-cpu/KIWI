@@ -1,4 +1,4 @@
-import google.generativeai as genai
+cimport google.generativeai as genai
 from config import OWNER_NAME, OWNER_USERNAME, GROUP_NAME, GROUP_LINK
 from database import get_all_keys, get_sticker_packs
 import random
