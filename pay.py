@@ -12,9 +12,9 @@ from database import (
 )
 
 # --- ECONOMY CONFIGS ---
-PROTECT_COST_PER_DAY = 5000   # Cost for 1 Day
-HOSPITAL_FEE = 5000           # Revive Cost
-ROB_FAIL_PENALTY = 500 
+PROTECT_COST_PER_DAY = 900   # Cost for 1 Day
+HOSPITAL_FEE = 500           # Revive Cost
+ROB_FAIL_PENALTY = 300 
 KILL_REWARD = 900     
 AUTO_REVIVE_TIME = 1800 
 
@@ -31,9 +31,11 @@ def to_fancy(text):
 # --- HELPER: REGISTER BUTTON ---
 async def send_register_button(update):
     user = update.effective_user
+    # Safety Fix: html.escape use kiya taaki naam me < > ho toh error na aaye
+    safe_name = html.escape(user.first_name)
     kb = [[InlineKeyboardButton("📝 Register Now", callback_data=f"reg_start_{user.id}")]]
     await update.message.reply_text(
-        f"🛑 <b>{user.first_name}, {to_fancy('Register First!')}</b>",
+        f"🛑 <b>{safe_name}, {to_fancy('Register First!')}</b>",
         reply_markup=InlineKeyboardMarkup(kb),
         quote=True,
         parse_mode=ParseMode.HTML
@@ -55,13 +57,13 @@ async def auto_revive_job(context: ContextTypes.DEFAULT_TYPE):
 # --- 1. PAY (Transfer Money) ---
 async def pay_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not get_economy_status(): 
-        return await update.message.reply_text(f"🔴 <b>{to_fancy('Economy is OFF!')}</b>")
+        return await update.message.reply_text(f"🔴 <b>{to_fancy('Economy is OFF!')}</b>", parse_mode=ParseMode.HTML)
     
     sender = update.effective_user
     
     if not check_registered(sender.id): return await send_register_button(update)
     if is_dead(sender.id): 
-        return await update.message.reply_text(f"👻 <b>{to_fancy('Ghosts cannot use the bank! Revive first.')}</b>")
+        return await update.message.reply_text(f"👻 <b>{to_fancy('Ghosts cannot use the bank! Revive first.')}</b>", parse_mode=ParseMode.HTML)
 
     if not update.message.reply_to_message:
         return await update.message.reply_text(f"⚠️ <b>{to_fancy('Usage:')}</b> {to_fancy('Reply to a user with')} <code>/pay 100</code>", parse_mode=ParseMode.HTML)
@@ -70,8 +72,11 @@ async def pay_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if receiver.is_bot or sender.id == receiver.id: 
         return await update.message.reply_text(f"❌ {to_fancy('Invalid transaction!')}")
     
+    # Safety Fix
+    safe_r_name = html.escape(receiver.first_name)
+    
     if not check_registered(receiver.id): 
-        return await update.message.reply_text(f"❌ <b>{receiver.first_name}</b> {to_fancy('is not registered.')}", parse_mode=ParseMode.HTML)
+        return await update.message.reply_text(f"❌ <b>{safe_r_name}</b> {to_fancy('is not registered.')}", parse_mode=ParseMode.HTML)
 
     try: 
         amount = int(context.args[0])
@@ -86,7 +91,7 @@ async def pay_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     update_balance(receiver.id, amount)
     
     txt = to_fancy(f"Transfer: ₹{amount} sent to")
-    await update.message.reply_text(f"💸 <b>{txt} {html.escape(receiver.first_name)}</b> ✅", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"💸 <b>{txt} {safe_r_name}</b> ✅", parse_mode=ParseMode.HTML)
 
 # --- 2. PROTECT (Shield) ---
 async def protect_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,8 +143,10 @@ async def rob_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     victim = update.message.reply_to_message.from_user
     if not victim or victim.is_bot or thief.id == victim.id: return
     
+    safe_v_name = html.escape(victim.first_name)
+    
     if not check_registered(victim.id): 
-        return await update.message.reply_text(f"⚠️ <b>{victim.first_name}</b> {to_fancy('is not registered.')}", parse_mode=ParseMode.HTML)
+        return await update.message.reply_text(f"⚠️ <b>{safe_v_name}</b> {to_fancy('is not registered.')}", parse_mode=ParseMode.HTML)
     
     if is_dead(victim.id): 
         return await update.message.reply_text(f"☠️ {to_fancy('Cannot loot a dead body!')}")
@@ -157,7 +164,7 @@ async def rob_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update_balance(thief.id, loot)
         
         msg = to_fancy(f"You robbed ₹{loot} from")
-        await update.message.reply_text(f"🔫 <b>{msg} {html.escape(victim.first_name)}!</b> 😈", parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"🔫 <b>{msg} {safe_v_name}!</b> 😈", parse_mode=ParseMode.HTML)
     else:
         update_balance(thief.id, -ROB_FAIL_PENALTY)
         msg = to_fancy("Police Caught You! Fined:")
@@ -198,9 +205,10 @@ async def kill_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if context.job_queue:
             context.job_queue.run_once(auto_revive_job, AUTO_REVIVE_TIME, data=victim.id)
         
-        # 🔥 SHORT & STYLISH MESSAGE
-        k_name = to_fancy(killer.first_name)
-        v_name = to_fancy(victim.first_name)
+        # 🔥 FIXED HERE: html.escape(to_fancy())
+        k_name = html.escape(to_fancy(killer.first_name))
+        v_name = html.escape(to_fancy(victim.first_name))
+        
         killed_txt = to_fancy("killed")
         earned_txt = to_fancy("Earned:")
         
@@ -219,10 +227,13 @@ async def revive_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = payer
     if update.message.reply_to_message:
         target = update.message.reply_to_message.from_user
+    
+    # Safety Fix
+    safe_target_name = html.escape(target.first_name)
         
     if not is_dead(target.id):
         msg = to_fancy("is already alive!")
-        return await update.message.reply_text(f"🏥 <b>{target.first_name}</b> {msg}", parse_mode=ParseMode.HTML)
+        return await update.message.reply_text(f"🏥 <b>{safe_target_name}</b> {msg}", parse_mode=ParseMode.HTML)
     
     if get_balance(payer.id) < HOSPITAL_FEE:
         msg = to_fancy(f"You need ₹{HOSPITAL_FEE} to revive!")
@@ -237,9 +248,9 @@ async def revive_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         revived_txt = to_fancy("You Revived Yourself!")
         await update.message.reply_text(f"✨ <b>{revived_txt}</b>\n💸 {fee_txt}", parse_mode=ParseMode.HTML)
     else:
-        revived_txt = to_fancy(f"You Revived {target.first_name}!")
+        revived_txt = to_fancy(f"You Revived")
         paid_txt = to_fancy("(Paid by you)")
-        await update.message.reply_text(f"✨ <b>{revived_txt}</b>\n💸 {fee_txt} {paid_txt}", parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✨ <b>{revived_txt} {safe_target_name}!</b>\n💸 {fee_txt} {paid_txt}", parse_mode=ParseMode.HTML)
 
 # --- 6. ALIVE / STATUS ---
 async def check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -257,4 +268,4 @@ async def check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_txt = to_fancy("Status:")
     
     await update.message.reply_text(f"❤️ <b>{status_txt}</b> {status}\n💰 <b>{money_txt}</b> ₹{get_balance(user.id)}", parse_mode=ParseMode.HTML)
-
+            
