@@ -289,4 +289,25 @@ def delete_logger_group(): settings_col.delete_one({"_id": "logger_settings"})
 # Global Counts
 def get_total_users(): return users_col.count_documents({})
 def get_total_groups(): return groups_col.count_documents({})
-              
+
+# --- ADD THIS TO database.py ---
+# These functions are needed for Gchat/Gsticker settings
+
+def set_group_setting(chat_id, setting_type, value):
+    groups_col.update_one(
+        {"chat_id": chat_id},
+        {"$set": {f"settings.{setting_type}": value}},
+        upsert=True
+    )
+
+def get_group_settings(chat_id):
+    data = groups_col.find_one({"chat_id": chat_id})
+    if not data or "settings" not in data:
+        return {"chat_mode": True, "sticker_mode": True}
+    
+    settings = data.get("settings", {})
+    return {
+        "chat_mode": settings.get("chat_mode", True),
+        "sticker_mode": settings.get("sticker_mode", True)
+    }
+    
