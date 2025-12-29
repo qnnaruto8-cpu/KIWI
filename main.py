@@ -15,7 +15,7 @@ from database import (
     update_username, update_chat_stats,
     is_user_muted, is_user_banned,
     get_logger_group,
-    set_group_setting, get_group_settings  # ✅ ADDED NEW DB FUNCTIONS
+    set_group_setting, get_group_settings 
 )
 from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
@@ -47,7 +47,7 @@ SHOP_ITEMS = {
     "rich":  {"name": "💸 Rich", "price": 100000}
 }
 
-# --- 🔌 AUTO LOADER FUNCTION (DEBUG MODE) ---
+# --- 🔌 AUTO LOADER FUNCTION ---
 def load_plugins(application: Application):
     plugin_dir = "tools"
     if not os.path.exists(plugin_dir):
@@ -281,7 +281,7 @@ async def callback_handler(update, context):
         await livetime.close_time(update, context)
         return
 
-# --- MESSAGE HANDLER (UPDATED LOGIC) ---
+# --- MESSAGE HANDLER (UPDATED FOR COMPLETE SILENCE) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     user = update.effective_user
@@ -340,18 +340,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if not text: return
 
+    # 🔥 COMPLETE SILENCE LOGIC
+    # Agar Private Chat nahi hai aur Chat Mode OFF hai -> RETURN KAR DO (Bilkul Chup)
+    if chat.type != "private" and not chat_enabled:
+        return 
+
+    # Normal AI Logic
     should_reply = False
     if chat.type == "private": should_reply = True
     elif any(trigger in text.lower() for trigger in ["aniya", context.bot.username.lower()]): should_reply = True
     elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id: should_reply = True
-
-    # 🛑 CHAT MODE CHECK
-    if chat.type != "private" and not chat_enabled:
-        # Agar GChat OFF hai, toh sirf Reply karne par hi bolega
-        if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
-            should_reply = True 
-        else:
-            should_reply = False # Random triggers (aniya) ignore honge
 
     if should_reply:
         voice_triggers = ["voice", "note", "moh", "audio", "gn", "gm", "rec","kaho"]
@@ -442,4 +440,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+                                               
