@@ -132,8 +132,8 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("▢", callback_data="music_stop")
         ],
         [
-            InlineKeyboardButton("📺 ʏᴏᴜᴛᴜʙᴇ", url=link),
-            InlineKeyboardButton(f"📸 ɪɴsᴛᴀɢʀᴀᴍ", url=INSTAGRAM_LINK)
+            InlineKeyboardButton("🍫 ʏᴏᴜᴛᴜʙᴇ", url=link),
+            InlineKeyboardButton(f"🍷ꜱᴜᴘᴘᴏʀᴛ", url=INSTAGRAM_LINK)
         ],
         [
             InlineKeyboardButton("🗑 ᴄʟᴏsᴇ ᴘʟᴀʏᴇʀ", callback_data="force_close")
