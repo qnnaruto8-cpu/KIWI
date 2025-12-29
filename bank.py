@@ -1,28 +1,65 @@
 import html
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from database import (
     get_balance, update_balance, get_bank_balance, 
     update_bank_balance, get_loan, set_loan, 
-    users_col, is_dead, is_protected, get_user
+    users_col, is_dead, is_protected, get_user,
+    check_registered
 )
 
 # Config
 MAX_LOAN_LIMIT = 50000
 
-# Fancy Font Helper
+# --- 🔥 HELPER: FONT STYLER (Small Caps) ---
 def to_fancy(text):
-    mapping = {'A': 'Λ', 'E': 'Є', 'S': 'δ', 'O': 'σ', 'T': 'ᴛ', 'N': 'ɴ', 'M': 'ᴍ', 'U': 'ᴜ', 'R': 'ʀ', 'D': 'ᴅ', 'C': 'ᴄ', 'P': 'ᴘ', 'G': 'ɢ', 'B': 'ʙ', 'L': 'ʟ', 'W': 'ᴡ', 'K': 'ᴋ', 'J': 'ᴊ', 'Y': 'ʏ', 'I': 'ɪ', 'H': 'ʜ'}
-    return "".join(mapping.get(c.upper(), c) for c in text)
+    normal = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    stylish = "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ"
+    try:
+        table = str.maketrans(normal, stylish)
+        return text.translate(table)
+    except:
+        return text
 
-# --- 1. CHECK BALANCE (/bal) - FIXED GAP ---
+# --- 1. CHECK BALANCE (/bal) ---
 async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Shows User Profile, Rank, Status & Balance"""
-    user = update.effective_user
-    uid = user.id
+    """Shows User Profile, Rank, Status & Balance (Reply Aware)"""
     
-    # Fetch Data
+    # 1. Determine Target User
+    if update.message.reply_to_message:
+        target = update.message.reply_to_message.from_user
+    else:
+        target = update.effective_user
+
+    # 🔥 BOT CHECK LOGIC
+    if target.is_bot:
+        msg = to_fancy("Bots do not have money! We are rich in code.")
+        return await update.message.reply_text(f"🤖 <b>{msg}</b>", parse_mode=ParseMode.HTML)
+
+    # 2. Check if Registered
+    if not check_registered(target.id):
+        # Get Bot Username for Link
+        bot_username = context.bot.username
+        if not bot_username:
+            me = await context.bot.get_me()
+            bot_username = me.username
+        
+        # Inline Button (Start to DM)
+        kb = [[InlineKeyboardButton("📝 Register Here", url=f"https://t.me/{bot_username}?start=register")]]
+        
+        not_reg_txt = to_fancy("is not registered!")
+        you_not_reg = to_fancy("You are not registered!")
+        
+        if target.id == update.effective_user.id:
+            msg = f"🚫 <b>{html.escape(target.first_name)}</b>, {you_not_reg}"
+        else:
+            msg = f"🚫 <b>{html.escape(target.first_name)}</b> {not_reg_txt}"
+            
+        return await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+    
+    # 3. Fetch Data for Target
+    uid = target.id
     wallet = get_balance(uid)
     bank = get_bank_balance(uid)
     total_amt = wallet + bank
@@ -30,23 +67,32 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kills = user_db.get("kills", 0) if user_db else 0
     
     # Determine Status
-    if is_dead(uid): status = "💀 DEAD"
-    elif is_protected(uid): status = "🛡️ PROTECTED"
-    else: status = "👤 ALIVE"
+    if is_dead(uid): status = f"💀 {to_fancy('DEAD')}"
+    elif is_protected(uid): status = f"🛡️ {to_fancy('PROTECTED')}"
+    else: status = f"👤 {to_fancy('ALIVE')}"
 
     # Calculate Rank
     rank = users_col.count_documents({"balance": {"$gt": wallet}}) + 1
 
-    # 🔥 FIX: Removed extra newlines between blockquotes
+    # 4. Show Stats (Aesthetic Mode)
+    t_profile = to_fancy('USER PROFILE')
+    t_name = to_fancy('NAME')
+    t_total = to_fancy('TOTAL')
+    t_rank = to_fancy('RANK')
+    t_status = to_fancy('STATUS')
+    t_kills = to_fancy('KILLS')
+    t_wallet = to_fancy('WALLET')
+    t_bank = to_fancy('BANK')
+
     msg = (
-        f"<blockquote><b>👤 {to_fancy('USER PROFILE')}</b></blockquote>"
-        f"<blockquote><b>📛 ɴᴀᴍᴇ :</b> {html.escape(user.first_name)}\n"
-        f"<b>💰 ᴛᴏᴛᴀʟ :</b> ₹{total_amt}\n"
-        f"<b>🏆 ʀᴀɴᴋ :</b> #{rank}\n"
-        f"<b>❤️ sᴛᴀᴛᴜs :</b> {status}\n"
-        f"<b>⚔️ ᴋɪʟʟs :</b> {kills}</blockquote>"
-        f"<blockquote><b>👛 ᴡᴀʟʟᴇᴛ :</b> ₹{wallet}\n"
-        f"<b>💎 ʙᴀɴᴋ :</b> ₹{bank}</blockquote>"
+        f"<blockquote><b>👤 {t_profile}</b></blockquote>"
+        f"<blockquote><b>📛 {t_name} :</b> {html.escape(target.first_name)}\n"
+        f"<b>💰 {t_total} :</b> ₹{total_amt}\n"
+        f"<b>🏆 {t_rank} :</b> #{rank}\n"
+        f"<b>❤️ {t_status} :</b> {status}\n"
+        f"<b>⚔️ {t_kills} :</b> {kills}</blockquote>"
+        f"<blockquote><b>👛 {t_wallet} :</b> ₹{wallet}\n"
+        f"<b>💎 {t_bank} :</b> ₹{bank}</blockquote>"
     )
     await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
@@ -60,24 +106,29 @@ async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     wallet = get_balance(user.id)
     
     if not context.args: 
-        return await update.message.reply_text("⚠️ <b>Usage:</b> <code>/deposit 100</code>", parse_mode=ParseMode.HTML)
+        usage_txt = to_fancy("Usage:")
+        return await update.message.reply_text(f"⚠️ <b>{usage_txt}</b> <code>/deposit 100</code>", parse_mode=ParseMode.HTML)
     
     if context.args[0].lower() == "all": amount = wallet
     else:
         try: amount = int(context.args[0])
-        except: return await update.message.reply_text("❌ Invalid number.")
+        except: return await update.message.reply_text(f"❌ {to_fancy('Invalid number.')}")
 
-    if amount <= 0: return await update.message.reply_text("❌ > 0 required.")
-    if amount > wallet: return await update.message.reply_text("❌ Insufficient funds.")
+    if amount <= 0: return await update.message.reply_text(f"❌ {to_fancy('Positive amount required.')}")
+    if amount > wallet: return await update.message.reply_text(f"❌ {to_fancy('Insufficient funds.')}")
     
     update_balance(user.id, -amount)
     update_bank_balance(user.id, amount)
     new_bank = get_bank_balance(user.id)
     
+    success_txt = to_fancy("DEPOSIT SUCCESS")
+    dep_txt = to_fancy("DEPOSITED")
+    new_bal_txt = to_fancy("NEW BALANCE")
+    
     msg = (
-        f"<blockquote><b>✅ {to_fancy('DEPOSIT SUCCESS')}</b></blockquote>"
-        f"<blockquote><b>💰 ᴅᴇᴘᴏsɪᴛᴇᴅ :</b> ₹{amount}\n"
-        f"<b>💎 ɴᴇᴡ ʙᴀʟᴀɴᴄᴇ :</b> ₹{new_bank}</blockquote>"
+        f"<blockquote><b>✅ {success_txt}</b></blockquote>"
+        f"<blockquote><b>💰 {dep_txt} :</b> ₹{amount}\n"
+        f"<b>💎 {new_bal_txt} :</b> ₹{new_bank}</blockquote>"
     )
     await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
@@ -87,24 +138,29 @@ async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bank = get_bank_balance(user.id)
     
     if not context.args: 
-        return await update.message.reply_text("⚠️ <b>Usage:</b> <code>/withdraw 100</code>", parse_mode=ParseMode.HTML)
+        usage_txt = to_fancy("Usage:")
+        return await update.message.reply_text(f"⚠️ <b>{usage_txt}</b> <code>/withdraw 100</code>", parse_mode=ParseMode.HTML)
     
     if context.args[0].lower() == "all": amount = bank
     else:
         try: amount = int(context.args[0])
-        except: return await update.message.reply_text("❌ Invalid number.")
+        except: return await update.message.reply_text(f"❌ {to_fancy('Invalid number.')}")
 
-    if amount <= 0: return await update.message.reply_text("❌ > 0 required.")
-    if amount > bank: return await update.message.reply_text("❌ Insufficient funds.")
+    if amount <= 0: return await update.message.reply_text(f"❌ {to_fancy('Positive amount required.')}")
+    if amount > bank: return await update.message.reply_text(f"❌ {to_fancy('Insufficient funds.')}")
     
     update_bank_balance(user.id, -amount)
     update_balance(user.id, amount)
     new_wallet = get_balance(user.id)
     
+    success_txt = to_fancy("WITHDRAW SUCCESS")
+    with_txt = to_fancy("WITHDREW")
+    new_wal_txt = to_fancy("NEW WALLET")
+    
     msg = (
-        f"<blockquote><b>✅ {to_fancy('WITHDRAW SUCCESS')}</b></blockquote>"
-        f"<blockquote><b>💸 ᴡɪᴛʜᴅʀᴇᴡ :</b> ₹{amount}\n"
-        f"<b>👛 ɴᴇᴡ ᴡᴀʟʟᴇᴛ :</b> ₹{new_wallet}</blockquote>"
+        f"<blockquote><b>✅ {success_txt}</b></blockquote>"
+        f"<blockquote><b>💸 {with_txt} :</b> ₹{amount}\n"
+        f"<b>👛 {new_wal_txt} :</b> ₹{new_wallet}</blockquote>"
     )
     await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
@@ -113,20 +169,30 @@ async def take_loan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     current_loan = get_loan(user.id)
     
-    if current_loan > 0: return await update.message.reply_text(f"❌ Pending Loan: <b>₹{current_loan}</b>", parse_mode=ParseMode.HTML)
+    if current_loan > 0: 
+        err_txt = to_fancy("Pending Loan:")
+        return await update.message.reply_text(f"❌ {err_txt} <b>₹{current_loan}</b>", parse_mode=ParseMode.HTML)
         
     try: amount = int(context.args[0])
-    except: return await update.message.reply_text("⚠️ <b>Usage:</b> <code>/loan 5000</code>", parse_mode=ParseMode.HTML)
+    except: 
+        usage_txt = to_fancy("Usage:")
+        return await update.message.reply_text(f"⚠️ <b>{usage_txt}</b> <code>/loan 5000</code>", parse_mode=ParseMode.HTML)
     
-    if amount > MAX_LOAN_LIMIT: return await update.message.reply_text(f"❌ Max Limit: <b>₹{MAX_LOAN_LIMIT}</b>", parse_mode=ParseMode.HTML)
+    if amount > MAX_LOAN_LIMIT: 
+        err_txt = to_fancy("Max Limit:")
+        return await update.message.reply_text(f"❌ {err_txt} <b>₹{MAX_LOAN_LIMIT}</b>", parse_mode=ParseMode.HTML)
     
     update_balance(user.id, amount)
     set_loan(user.id, amount)
     
+    app_txt = to_fancy("LOAN APPROVED")
+    amt_txt = to_fancy("AMOUNT")
+    note_txt = to_fancy("NOTE")
+    
     msg = (
-        f"<blockquote><b>💸 {to_fancy('LOAN APPROVED')}</b></blockquote>"
-        f"<blockquote><b>💰 ᴀᴍᴏᴜɴᴛ :</b> ₹{amount}\n"
-        f"<b>⚠️ ɴᴏᴛᴇ :</b> Repay soon!</blockquote>"
+        f"<blockquote><b>💸 {app_txt}</b></blockquote>"
+        f"<blockquote><b>💰 {amt_txt} :</b> ₹{amount}\n"
+        f"<b>⚠️ {note_txt} :</b> Repay soon!</blockquote>"
     )
     await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
@@ -136,16 +202,23 @@ async def repay_loan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     debt = get_loan(user.id)
     wallet = get_balance(user.id)
     
-    if debt == 0: return await update.message.reply_text("✅ No active loans.")
+    if debt == 0: 
+        return await update.message.reply_text(f"✅ {to_fancy('No active loans.')}")
     
-    if wallet < debt: return await update.message.reply_text(f"❌ Need <b>₹{debt}</b>, have <b>₹{wallet}</b>.", parse_mode=ParseMode.HTML)
+    if wallet < debt: 
+        return await update.message.reply_text(f"❌ Need <b>₹{debt}</b>, have <b>₹{wallet}</b>.", parse_mode=ParseMode.HTML)
         
     update_balance(user.id, -debt)
     set_loan(user.id, 0)
     
+    repaid_txt = to_fancy("LOAN REPAID")
+    paid_txt = to_fancy("PAID")
+    stat_txt = to_fancy("STATUS")
+    
     msg = (
-        f"<blockquote><b>✅ {to_fancy('LOAN REPAID')}</b></blockquote>"
-        f"<blockquote><b>💸 ᴘᴀɪᴅ :</b> ₹{debt}\n"
-        f"<b>🔓 sᴛᴀᴛᴜs :</b> Debt Free</blockquote>"
+        f"<blockquote><b>✅ {repaid_txt}</b></blockquote>"
+        f"<blockquote><b>💸 {paid_txt} :</b> ₹{debt}\n"
+        f"<b>🔓 {stat_txt} :</b> Debt Free</blockquote>"
     )
     await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        
