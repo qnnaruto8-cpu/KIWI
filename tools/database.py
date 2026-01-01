@@ -28,9 +28,12 @@ try:
     video_db = db.video_chats
     queue_db = db.queues
     
-    # Collections (Broadcast Data) 🔥 NEW
+    # Collections (Broadcast Data)
     users_db = db.served_users
     chats_db = db.served_chats
+
+    # Collections (Settings) 🔥 NEW
+    settings_db = db.settings
     
     print("✅ Async Database Connected Successfully!")
 except Exception as e:
@@ -109,7 +112,7 @@ async def get_cached_song(query):
     return None
 
 # ==========================================
-#        📢 BROADCAST FUNCTIONS (NEW)
+#        📢 BROADCAST FUNCTIONS
 # ==========================================
 
 # 1. Served Users (DMs ke liye)
@@ -135,4 +138,23 @@ async def add_served_chat(chat_id: int):
     is_served = await chats_db.find_one({"chat_id": chat_id})
     if not is_served:
         await chats_db.insert_one({"chat_id": chat_id})
-        
+
+# ==========================================
+#        ⚙️ SETTINGS FUNCTIONS (NEW)
+# ==========================================
+
+async def set_admincmd_mode(chat_id: int, state: bool):
+    """Admin List command ko ON/OFF set karta hai"""
+    await settings_db.update_one(
+        {"chat_id": chat_id},
+        {"$set": {"admin_list_enabled": state}},
+        upsert=True
+    )
+
+async def is_admincmd_enabled(chat_id: int):
+    """Check karta hai ki Admin List command ON hai ya OFF (Default: ON)"""
+    data = await settings_db.find_one({"chat_id": chat_id})
+    if not data:
+        return True # Default ON rahega
+    return data.get("admin_list_enabled", True)
+    
