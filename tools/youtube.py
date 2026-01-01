@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import functools # ✅ NEW IMPORT
 from typing import Union
 
 import yt_dlp
@@ -8,7 +9,8 @@ from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
 from youtubesearchpython.__future__ import VideosSearch
 
-# --- HELPER FUNCTION (Database dependency hatane ke liye) ---
+# --- HELPER FUNCTIONS ---
+
 def time_to_seconds(time):
     stringt = str(time)
     return sum(int(x) * 60**i for i, x in enumerate(reversed(stringt.split(":"))))
@@ -28,7 +30,6 @@ async def shell_cmd(cmd):
     return out.decode("utf-8")
 
 # --- SMART COOKIES PATH ---
-# Root folder ya Assets folder, kahin bhi ho utha lega
 if os.path.exists("cookies.txt"):
     cookies_file = "cookies.txt"
 elif os.path.exists("PRINCEMUSIC/assets/cookies.txt"):
@@ -81,6 +82,8 @@ class YouTubeAPI:
             link = self.base + link
         if "&" in link:
             link = link.split("&")[0]
+        
+        # Async Search
         results = VideosSearch(link, limit=1)
         for result in (await results.next())["result"]:
             title = result["title"]
@@ -129,7 +132,6 @@ class YouTubeAPI:
         if "&" in link:
             link = link.split("&")[0]
         
-        # 🔥 FIX: Added source-address 0.0.0.0
         cmd_args = [
             "yt-dlp",
             "-g",
@@ -158,7 +160,6 @@ class YouTubeAPI:
         if "&" in link:
             link = link.split("&")[0]
         
-        # 🔥 FIX: Added source-address logic
         cookie_cmd = f"--cookies {cookies_file}" if cookies_file else ""
         playlist = await shell_cmd(
             f"yt-dlp {cookie_cmd} --source-address 0.0.0.0 -i --get-id --flat-playlist --playlist-end {limit} --skip-download {link}"
@@ -193,45 +194,53 @@ class YouTubeAPI:
         }
         return track_details, vidid
 
+    # 🔥🔥 MAJOR FIX HERE: 'formats' is no longer blocking 🔥🔥
     async def formats(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
         if "&" in link:
             link = link.split("&")[0]
         
-        # 🔥 FIX: Added source_address
         ytdl_opts = {"quiet": True, "source_address": "0.0.0.0"}
         if cookies_file:
             ytdl_opts["cookiefile"] = cookies_file
 
         ydl = yt_dlp.YoutubeDL(ytdl_opts)
-        with ydl:
-            formats_available = []
-            r = ydl.extract_info(link, download=False)
-            for format in r["formats"]:
+
+        # ✅ Wrapper function to run inside executor
+        def get_info_sync():
+            with ydl:
+                return ydl.extract_info(link, download=False)
+
+        loop = asyncio.get_running_loop()
+        # ✅ Run in background thread (NON-BLOCKING)
+        r = await loop.run_in_executor(None, get_info_sync)
+
+        formats_available = []
+        for format in r["formats"]:
+            try:
+                str(format["format"])
+            except:
+                continue
+            if not "dash" in str(format["format"]).lower():
                 try:
-                    str(format["format"])
+                    format["format"]
+                    format["filesize"]
+                    format["format_id"]
+                    format["ext"]
+                    format["format_note"]
                 except:
                     continue
-                if not "dash" in str(format["format"]).lower():
-                    try:
-                        format["format"]
-                        format["filesize"]
-                        format["format_id"]
-                        format["ext"]
-                        format["format_note"]
-                    except:
-                        continue
-                    formats_available.append(
-                        {
-                            "format": format["format"],
-                            "filesize": format["filesize"],
-                            "format_id": format["format_id"],
-                            "ext": format["ext"],
-                            "format_note": format["format_note"],
-                            "yturl": link,
-                        }
-                    )
+                formats_available.append(
+                    {
+                        "format": format["format"],
+                        "filesize": format["filesize"],
+                        "format_id": format["format_id"],
+                        "ext": format["ext"],
+                        "format_note": format["format_note"],
+                        "yturl": link,
+                    }
+                )
         return formats_available, link
 
     async def slider(
@@ -267,8 +276,6 @@ class YouTubeAPI:
             link = self.base + link
         loop = asyncio.get_running_loop()
 
-        # 🔥 HAR DOWNLOADER FUNCTION ME SOURCE_ADDRESS: 0.0.0.0 ADDED 🔥
-
         def audio_dl():
             ydl_optssx = {
                 "format": "bestaudio/best",
@@ -277,7 +284,7 @@ class YouTubeAPI:
                 "nocheckcertificate": True,
                 "quiet": True,
                 "no_warnings": True,
-                "source_address": "0.0.0.0", # Fix
+                "source_address": "0.0.0.0",
             }
             if cookies_file:
                 ydl_optssx["cookiefile"] = cookies_file
@@ -298,7 +305,7 @@ class YouTubeAPI:
                 "nocheckcertificate": True,
                 "quiet": True,
                 "no_warnings": True,
-                "source_address": "0.0.0.0", # Fix
+                "source_address": "0.0.0.0",
             }
             if cookies_file:
                 ydl_optssx["cookiefile"] = cookies_file
@@ -323,7 +330,7 @@ class YouTubeAPI:
                 "no_warnings": True,
                 "prefer_ffmpeg": True,
                 "merge_output_format": "mp4",
-                "source_address": "0.0.0.0", # Fix
+                "source_address": "0.0.0.0",
             }
             if cookies_file:
                 ydl_optssx["cookiefile"] = cookies_file
@@ -348,7 +355,7 @@ class YouTubeAPI:
                         "preferredquality": "192",
                     }
                 ],
-                "source_address": "0.0.0.0", # Fix
+                "source_address": "0.0.0.0",
             }
             if cookies_file:
                 ydl_optssx["cookiefile"] = cookies_file
@@ -365,11 +372,10 @@ class YouTubeAPI:
             fpath = f"downloads/{title}.mp3"
             return fpath
         elif video:
-            # Removed DB check, defaulting to reliable executor method
             direct = True
             downloaded_file = await loop.run_in_executor(None, video_dl)
         else:
             direct = True
             downloaded_file = await loop.run_in_executor(None, audio_dl)
         return downloaded_file, direct
-                       
+        
