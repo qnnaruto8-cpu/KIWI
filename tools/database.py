@@ -157,4 +157,34 @@ async def is_admincmd_enabled(chat_id: int):
     if not data:
         return True # Default ON rahega
     return data.get("admin_list_enabled", True)
+
+# --- FILTER SYSTEM (tools/database.py ke end mein add karo) ---
+
+filters_db = db.filters
+
+async def save_filter(chat_id: int, keyword: str, file_data: dict):
+    """Filter save karta hai (Keyword -> Content)"""
+    await filters_db.update_one(
+        {"chat_id": chat_id, "keyword": keyword.lower()},
+        {"$set": {"file_data": file_data}},
+        upsert=True
+    )
+
+async def get_filter(chat_id: int, keyword: str):
+    """Keyword match hone par content deta hai"""
+    data = await filters_db.find_one({"chat_id": chat_id, "keyword": keyword.lower()})
+    return data["file_data"] if data else None
+
+async def delete_filter(chat_id: int, keyword: str):
+    """Filter delete karta hai"""
+    result = await filters_db.delete_one({"chat_id": chat_id, "keyword": keyword.lower()})
+    return result.deleted_count > 0
+
+async def get_all_filters(chat_id: int):
+    """Group ke saare filters ki list deta hai"""
+    keywords = []
+    async for doc in filters_db.find({"chat_id": chat_id}):
+        keywords.append(doc["keyword"])
+    return keywords
+    
     
