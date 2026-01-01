@@ -47,37 +47,27 @@ SHOP_ITEMS = {
     "rich":  {"name": "💸 Rich", "price": 100000}
 }
 
-# --- 🔌 AUTO LOADER FUNCTION (UPDATED) ---
+# --- 🔌 AUTO LOADER FUNCTION ---
 def load_plugins(application: Application):
     plugin_dir = "tools"
-    # Agar folder nahi hai to bana do
     if not os.path.exists(plugin_dir):
         try: os.makedirs(plugin_dir); print(f"📁 Created '{plugin_dir}' directory.")
         except: pass
         return
 
     path_list = [f for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
-    print(f"🔌 Found {len(path_list)} files in '{plugin_dir}', loading plugins FIRST...")
+    print(f"🔌 Loading {len(path_list)} plugins from '{plugin_dir}'...")
 
-    count = 0
     for file in path_list:
         module_name = file[:-3]
         try:
-            # Module import karo
             module = importlib.import_module(f"{plugin_dir}.{module_name}")
-            # Agar module mein register_handlers function hai, to run karo
             if hasattr(module, "register_handlers"):
                 module.register_handlers(application)
-                print(f"  ✅ [PLUGIN] Loaded: {module_name}")
-                count += 1
-            else:
-                print(f"  ⚠️ [PLUGIN] Skipped: {module_name} (No register_handlers found)")
+                print(f"  ✅ Loaded: {module_name}")
         except Exception as e:
-            # Agar error aaye to sirf print karo, bot mat roko
-            print(f"  ❌ [PLUGIN ERROR] Could not load {module_name}!")
-            print(f"     Reason: {e}")
-    
-    print(f"✨ Total Plugins Loaded: {count}")
+            print(f"  ❌ FAILED to load {module_name}!")
+            print(f"     Error: {e}")
 
 # --- STARTUP MESSAGE ---
 async def on_startup(application: Application):
@@ -390,17 +380,7 @@ def main():
     keep_alive()
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
     
-    # ----------------------------------------------------
-    # 🔥 PRIORITY: LOAD PLUGINS FIRST
-    # ----------------------------------------------------
-    # Plugins ko sabse pehle load kiya ja raha hai taaki
-    # agar kisi plugin mein error aaye, toh wo skip ho jaye
-    # lekin standard bot commands (DB commands) chalte rahein.
-    load_plugins(app)
-    
-    # ----------------------------------------------------
-    # ✅ THEN LOAD STANDARD HANDLERS (Database Dependent)
-    # ----------------------------------------------------
+    # Handlers
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("admin", admin.admin_panel))
     app.add_handler(CommandHandler("info", info.user_info))
@@ -449,6 +429,9 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_PARTICIPANTS_INVITED, events.vc_handler))
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
+    
+    # 🔥 Plugins LOAD (Music vagera)
+    load_plugins(app)
 
     # Note: 'handle_message' catches ALL text, so it must be last
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
@@ -458,4 +441,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+                                               
