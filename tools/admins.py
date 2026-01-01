@@ -23,11 +23,9 @@ async def toggle_admincmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
     
-    # Sirf Group mein
     if chat.type == "private":
         return await update.message.reply_text("❌ ᴛʜɪs ᴄᴏᴍᴍᴀɴᴅ ɪs ᴏɴʟʏ ꜰᴏʀ ɢʀᴏᴜᴘs.")
 
-    # Only Admin Check
     member = await chat.get_member(user.id)
     if member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
         return await update.message.reply_text("❌ **ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴄʜᴀɴɢᴇ ᴛʜɪs sᴇᴛᴛɪɴɢ!**")
@@ -39,36 +37,35 @@ async def toggle_admincmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if state == "on":
         await set_admincmd_mode(chat.id, True)
-        await update.message.reply_text("✅ **ᴀᴅᴍɪɴ ʟɪsᴛ ᴄᴏᴍᴍᴀɴᴅ ᴇɴᴀʙʟᴇᴅ!**\nNow everyone can use `/admin`.")
+        await update.message.reply_text("✅ **ᴀᴅᴍɪɴ ʟɪsᴛ ᴄᴏᴍᴍᴀɴᴅ ᴇɴᴀʙʟᴇᴅ!**")
     elif state == "off":
         await set_admincmd_mode(chat.id, False)
-        await update.message.reply_text("🔒 **ᴀᴅᴍɪɴ ʟɪsᴛ ᴄᴏᴍᴍᴀɴᴅ ᴅɪsᴀʙʟᴇᴅ!**\n`/admin` will not work now.")
+        await update.message.reply_text("🔒 **ᴀᴅᴍɪɴ ʟɪsᴛ ᴄᴏᴍᴍᴀɴᴅ ᴅɪsᴀʙʟᴇᴅ!**")
     else:
         await update.message.reply_text("⚠️ ᴜsᴀɢᴇ: `/admincmd on` ᴏʀ `/admincmd off`")
 
-# --- MAIN COMMAND: SHOW LIST ---
+# --- 1. ADMIN LIST COMMAND (HUMANS ONLY) ---
 async def show_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
-    
     if chat.type == "private": return
 
-    # 🔥 STEP 1: CHECK IF ENABLED
+    # Check ON/OFF
     is_enabled = await is_admincmd_enabled(chat.id)
-    if not is_enabled:
-        # Agar OFF hai, to chup-chap return ho jao (Reply mat karo)
-        return
+    if not is_enabled: return
 
-    # List fetch logic...
-    try:
-        administrators = await chat.get_administrators()
-    except Exception as e:
-        return await update.message.reply_text(f"❌ ᴇʀʀᴏʀ: {e}")
+    try: administrators = await chat.get_administrators()
+    except: return
 
     owner = None
     admin_list = []
     
     for admin in administrators:
         user = admin.user
+        
+        # 🔥 Filter: Agar Bot hai to SKIP karo
+        if user.is_bot:
+            continue
+
         styled_name = to_small_caps(user.first_name)
         mention = f'<a href="tg://user?id={user.id}">{styled_name}</a>'
         
@@ -79,12 +76,9 @@ async def show_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if admin.status == ChatMemberStatus.OWNER:
             owner = f"{mention} {title}"
         else:
-            if user.is_bot:
-                admin_list.append(f"{mention} 🤖")
-            else:
-                admin_list.append(f"{mention} {title}")
+            admin_list.append(f"{mention} {title}")
 
-    # Build Message
+    # Message Build
     text = "<blockquote>"
     if owner:
         text += f"👑 <b>ᴏᴡɴᴇʀ :</b>\n└ {owner}\n\n"
@@ -93,17 +87,56 @@ async def show_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"👮 <b>ᴀᴅᴍɪɴs :</b>\n"
         for ad in admin_list:
             text += f"└ {ad}\n"
+    else:
+        # Agar Owner ke alawa koi human admin nahi hai
+        if not owner: text += "❌ ɴᴏ ʜᴜᴍᴀɴ ᴀᴅᴍɪɴs ꜰᴏᴜɴᴅ."
+        
     text += "</blockquote>"
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
-# --- REGISTER HANDLER ---
+# --- 2. BOTS LIST COMMAND (BOTS ONLY) ---
+async def show_bot_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    if chat.type == "private": return
+
+    try: administrators = await chat.get_administrators()
+    except: return
+
+    bot_list = []
+    
+    for admin in administrators:
+        user = admin.user
+        
+        # 🔥 Filter: Sirf Bots ko select karo
+        if not user.is_bot:
+            continue
+
+        styled_name = to_small_caps(user.first_name)
+        mention = f'<a href="tg://user?id={user.id}">{styled_name}</a>'
+        bot_list.append(f"🤖 {mention}")
+
+    text = "<blockquote>"
+    if bot_list:
+        text += f"🤖 <b>ʙᴏᴛ ʟɪsᴛ :</b>\n"
+        for b in bot_list:
+            text += f"└ {b}\n"
+    else:
+        text += "❌ ɴᴏ ᴀᴅᴍɪɴ ʙᴏᴛs ꜰᴏᴜɴᴅ."
+    text += "</blockquote>"
+
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+# --- REGISTER HANDLERS ---
 def register_handlers(app):
-    # ON/OFF Command
+    # ON/OFF
     app.add_handler(CommandHandler(["admincmd", "adminmode"], toggle_admincmd))
     
-    # Admin List Command
+    # Admin List (Regex for /admin and .admin)
     app.add_handler(MessageHandler(filters.Regex(r"^[./]admin$"), show_admin_list))
     
-    print("  ✅ Admin List Tool Loaded!")
-              
+    # Bot List (Regex for /bots and .bots)
+    app.add_handler(MessageHandler(filters.Regex(r"^[./]bots$"), show_bot_list))
+    
+    print("  ✅ Admin & Bot List Tools Loaded!")
+    
