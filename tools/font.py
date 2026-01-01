@@ -2,8 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode
 
-# --- 1. FONT STYLES DATABASE (Fixed Lengths) ---
-# Note: Humne Hacker font hata diya kyunki wo error de raha tha
+# --- 1. FONT STYLES DATABASE ---
 font_styles = {
     "sᴍᴀʟʟ ᴄᴀᴘs": str.maketrans(
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
@@ -44,7 +43,7 @@ font_styles = {
 }
 
 # --- 2. PAGINATION HELPER ---
-CHUNK_SIZE = 4  # Ek page par kitne fonts dikhenge
+CHUNK_SIZE = 4
 
 def get_font_page(text, page=0):
     styles = list(font_styles.items())
@@ -61,7 +60,6 @@ def get_font_page(text, page=0):
     msg += "👇 **Tap to Copy:**\n\n"
     
     for name, mapper in current_batch:
-        # Safe Translation
         try:
             converted = text.translate(mapper)
             msg += f"🔹 <b>{name}:</b>\n<code>{converted}</code>\n\n"
@@ -104,7 +102,7 @@ async def font_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.message.delete()
         return
 
-    # Text Fetch karo (Jo user ne type kiya tha)
+    # Text Fetch karo
     text = context.user_data.get('font_text', "Sample Text")
     
     # Page Change Logic
@@ -123,12 +121,16 @@ async def font_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         await query.edit_message_text(text=msg, reply_markup=markup, parse_mode=ParseMode.HTML)
     except:
-        pass # Agar same message hai to error ignore karo
+        pass 
     await query.answer()
 
 # --- 5. REGISTER HANDLERS ---
 def register_handlers(app):
     app.add_handler(CommandHandler("font", font_command))
-    app.add_handler(CallbackQueryHandler(font_button_handler, pattern="^font_"))
+    
+    # 🔥 MAJOR UPDATE: group=1 Add kiya gaya hai
+    # Isse buttons ab Main Bot ke handlers se alag hokar chalenge
+    app.add_handler(CallbackQueryHandler(font_button_handler, pattern="^font_"), group=1)
+    
     print("  ✅ Styled Font Module Loaded!")
     
