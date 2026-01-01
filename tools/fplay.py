@@ -6,8 +6,12 @@ from telegram.constants import ParseMode, ChatAction
 # Imports
 from tools.controller import process_stream
 from tools.stream import play_stream
-from tools.database import get_cached_song, save_cached_song # Jo upar banaya
-from config import OWNER_NAME
+from tools.database import get_cached_song, save_cached_song
+from tools.youtube import YouTubeAPI # ✅ YouTube Import kiya
+from tools.utils import run_sync # ✅ Anti-Freeze ke liye
+
+# Initialize YouTube
+YouTube = YouTubeAPI()
 
 # --- FPLAY COMMAND (/fplay) ---
 async def fplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -32,30 +36,46 @@ async def fplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cached_data = await get_cached_song(query)
 
     if cached_data:
-        # ✅ Agar Cache mil gaya (FAST PLAY)
-        await status_msg.edit_text(f"<blockquote>🚀 <b>Found in Cache! Playing Fast...</b></blockquote>", parse_mode=ParseMode.HTML)
-        
-        # Data DB se uthao
+        # ✅ Agar Cache mil gaya (Search Skip Karo)
         title = cached_data["title"]
         duration = cached_data["duration"]
         thumbnail = cached_data["thumbnail"]
         link = cached_data["link"]
-        # Note: Hum link use kar rahe hain, par actual play ke liye fresh extraction chahiye hoti hai
-        # unless tumhare paas direct file ID ho.
-        # Lekin "Search" ka time bach gaya yahan!
         
-        # Direct Play Logic Call karo
-        success, position = await play_stream(chat.id, link, title, duration, user.first_name, link, thumbnail)
+        await status_msg.edit_text(f"<blockquote>⬇️ <b>Found in Cache! Downloading...</b>\n{title}</blockquote>", parse_mode=ParseMode.HTML)
         
-        # (Yahan normal play message logic aayega buttons wala... same music.py jaisa)
-        # Short me dikha raha hu:
-        if success:
-             await context.bot.send_photo(chat.id, photo=thumbnail, caption=f"🚀 <b>Fast Play:</b> {title}")
-        
-        # Message delete
-        try: await status_msg.delete()
-        except: pass
-        return
+        # 🔥 MAIN FIX: Cache milne ke baad bhi DOWNLOAD karna padega
+        try:
+            # Background me download karo taaki bot freeze na ho
+            file_path, direct_link = await run_sync(
+                YouTube.download,
+                link,
+                mystic=None,
+                title=title,
+                format_id="bestaudio"
+            )
+            
+            # Ab Play karo (File Path bhej rahe hain, Link nahi)
+            success, position = await play_stream(chat.id, file_path, title, duration, user.first_name, link, thumbnail)
+            
+            if success:
+                # Buttons (Music.py style)
+                kb = [[InlineKeyboardButton("🗑 Close", callback_data="force_close")]]
+                await context.bot.send_photo(
+                    chat.id, 
+                    photo=thumbnail, 
+                    caption=f"🚀 <b>Fast Play (Cached):</b>\n🎵 <b>{title}</b>\n⏱ <b>Duration:</b> {duration}",
+                    reply_markup=InlineKeyboardMarkup(kb)
+                )
+            else:
+                await context.bot.send_message(chat.id, "❌ Stream Error: Added to Queue.")
+
+            await status_msg.delete()
+            return
+
+        except Exception as e:
+            print(f"❌ Cache Play Error: {e}")
+            # Agar Cache wala fail ho jaye, to niche Normal Play pe girne do...
 
     # --- 🐢 STEP 2: AGAR CACHE NAHI HAI (NORMAL PLAY + SAVE) ---
     await status_msg.edit_text(f"<blockquote>🔍 <b>Searching Web...</b>\n<code>{query}</code></blockquote>", parse_mode=ParseMode.HTML)
@@ -72,17 +92,23 @@ async def fplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "title": data["title"],
         "duration": data["duration"],
         "thumbnail": data["thumbnail"],
-        "link": data["link"] # YouTube URL (Not stream link)
+        "link": data["link"] # YouTube URL
     }
+    # Future ke liye save karo
     await save_cached_song(query, cache_entry)
 
-    # Baki Play logic same rahega... (Buttons, Caption etc.)
-    # ...
-    # ... (Yahan music.py wala same buttons code copy kar lena)
+    # Send Playing Message
+    kb = [[InlineKeyboardButton("🗑 Close", callback_data="force_close")]]
+    await context.bot.send_photo(
+        chat.id, 
+        photo=data["thumbnail"], 
+        caption=f"🎵 <b>Playing:</b> {data['title']}\n⏱ <b>Duration:</b> {data['duration']}\n👤 <b>Req:</b> {user.first_name}",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
     
     await status_msg.delete()
-
 
 def register_handlers(app):
     app.add_handler(CommandHandler(["fplay", "fp"], fplay_command))
     print("  ✅ Fast-Play Module Loaded!")
+    
