@@ -52,7 +52,7 @@ async def send_now_playing(chat_id, song_data):
             try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
             except: pass
         
-        # HTML Escape to prevent crashes
+        # HTML Escape
         title = html.escape(str(song_data["title"]))
         user = html.escape(str(song_data["by"]))
         duration = str(song_data["duration"])
@@ -117,7 +117,7 @@ async def start_music_worker():
     except Exception as e:
         print(f"❌ Assistant Error: {e}")
 
-# --- 1. PLAY LOGIC (WITH POSITION #0 FIX) ---
+# --- 1. PLAY LOGIC (FIXED: NO CUTTING SONGS) ---
 async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail):
     if not worker: return None, "Music System Error"
     
@@ -139,30 +139,29 @@ async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail
             # ✅ STEP 1: Pehle queue mein daalo
             position = await put_queue(chat_id, file_path, safe_title, duration, safe_user, link, thumbnail)
             
-            # 🔥 STEP 2: CRITICAL FIX - Agar ye pehla gaana hai (Position 0), toh Wait mat karo, PLAY KARO!
-            if position == 0:
-                print(f"⚡ [IDLE FIX] Bot was idle in {chat_id}, Force Playing Position #0")
+            # 🔥 STEP 2: SMART CHECK
+            # Force Play sirf tab karo jab Position 0 ho AUR Koi Message na ho (Matlab music band hai)
+            if position == 0 and chat_id not in LAST_MSG_ID:
+                print(f"⚡ [IDLE FIX] Bot was truly idle in {chat_id}, Force Playing.")
                 try:
                     await worker.change_stream(int(chat_id), stream)
-                    
-                    # UI Bhejo
-                    song_data = {"title": safe_title, "duration": duration, "by": safe_user, "link": link, "thumbnail": thumbnail}
-                    await send_now_playing(chat_id, song_data)
-                    
-                    return True, 0 # Return True taaki user ko "Playing" dikhe
-                except Exception as e:
-                    print(f"⚠️ Idle Change Failed: {e}, Trying Rejoin...")
-                    # Agar change fail hua to Rejoin karo
-                    try: await worker.leave_group_call(int(chat_id))
-                    except: pass
-                    await asyncio.sleep(0.5)
-                    await worker.join_group_call(int(chat_id), stream)
                     
                     song_data = {"title": safe_title, "duration": duration, "by": safe_user, "link": link, "thumbnail": thumbnail}
                     await send_now_playing(chat_id, song_data)
                     return True, 0
-
+                except Exception as e:
+                    print(f"⚠️ Change Failed: {e}, Rejoining...")
+                    try: await worker.leave_group_call(int(chat_id))
+                    except: pass
+                    await asyncio.sleep(0.5)
+                    await worker.join_group_call(int(chat_id), stream)
+                    song_data = {"title": safe_title, "duration": duration, "by": safe_user, "link": link, "thumbnail": thumbnail}
+                    await send_now_playing(chat_id, song_data)
+                    return True, 0
+            
+            # Agar music chal raha hai (LAST_MSG_ID exists), to Queue position return karo
             return False, position
+
         else:
             # Not Connected -> Join & Play
             try: await worker.leave_group_call(int(chat_id))
@@ -208,13 +207,15 @@ if worker:
         if chat_id in LAST_MSG_ID:
             try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
             except: pass 
+            # Message delete karte hi ID remove karo taaki Play logic ko pata chale bot free hai
+            del LAST_MSG_ID[chat_id]
         
         await asyncio.sleep(1)
         
-        # 1. Current Song ko Queue se hatao
+        # 1. Current Song Pop
         await pop_queue(chat_id)
         
-        # 2. Next song check karo
+        # 2. Next Check
         queue = await get_queue(chat_id)
         
         if queue and len(queue) > 0:
@@ -225,7 +226,6 @@ if worker:
                 try:
                     await worker.change_stream(chat_id, stream)
                 except:
-                    # Fallback to Rejoin
                     try: await worker.leave_group_call(chat_id)
                     except: pass
                     await asyncio.sleep(1)
@@ -242,15 +242,13 @@ if worker:
 async def skip_stream(chat_id):
     if not worker: return False
     
-    # Message Delete
     if chat_id in LAST_MSG_ID:
         try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
         except: pass
+        # Safe Remove
+        if chat_id in LAST_MSG_ID: del LAST_MSG_ID[chat_id]
 
-    # Current Song Pop
     await pop_queue(chat_id)
-    
-    # Check Next
     queue = await get_queue(chat_id)
     if queue and len(queue) > 0:
         next_song = queue[0]
@@ -264,11 +262,10 @@ async def skip_stream(chat_id):
             await stop_stream(chat_id)
             return False
     else:
-        # Queue Empty -> Stop
         await stop_stream(chat_id)
         return False
 
-# --- 4. STOP/PAUSE/RESUME/GET ---
+# --- 4. STOP/PAUSE/RESUME ---
 async def stop_stream(chat_id):
     if not worker: return False
     try:
@@ -278,6 +275,7 @@ async def stop_stream(chat_id):
         if chat_id in LAST_MSG_ID:
             try: await main_bot.delete_message(chat_id, LAST_MSG_ID[chat_id])
             except: pass
+            del LAST_MSG_ID[chat_id]
         return True
     except: return False
 
@@ -295,4 +293,4 @@ async def get_current_playing(chat_id):
     queue = await get_queue(chat_id)
     if queue and len(queue) > 0: return queue[0]
     return None
-    
+
