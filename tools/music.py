@@ -1,36 +1,24 @@
 import asyncio
 import html
-import math 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode, ChatAction
 from telegram.error import TelegramError
 
+# Pyrogram Errors for Assistant
+from pyrogram.errors import InviteRequestSent, UserAlreadyParticipant, UserNotParticipant
+
 # Imports
 from tools.controller import process_stream
-# ✅ FIX: Imported 'worker_app' for Client joining (prevents Invite Hash Expired)
-from tools.stream import stop_stream, skip_stream, pause_stream, resume_stream, worker, worker_app
+# ✅ worker_app imported for Client Joining
+from tools.stream import stop_stream, skip_stream, pause_stream, resume_stream, worker_app
 from tools.stream import LAST_MSG_ID, QUEUE_MSG_ID
-from config import OWNER_NAME, ASSISTANT_ID, INSTAGRAM_LINK, BOT_NAME
+from config import OWNER_NAME, ASSISTANT_ID, INSTAGRAM_LINK
 
-# --- HELPER: PROGRESS BAR LOGIC (UNCHANGED) ---
+# --- HELPER: PROGRESS BAR ---
 def get_progress_bar(duration):
-    """
-    Static aesthetic progress bar.
-    """
     try:
-        umm = 0 
-        if 0 < umm <= 10: bar = "◉—————————"
-        elif 10 < umm < 20: bar = "—◉————————"
-        elif 20 <= umm < 30: bar = "——◉———————"
-        elif 30 <= umm < 40: bar = "———◉——————"
-        elif 40 <= umm < 50: bar = "————◉—————"
-        elif 50 <= umm < 60: bar = "—————◉————"
-        elif 60 <= umm < 70: bar = "——————◉———"
-        elif 70 <= umm < 80: bar = "———————◉——"
-        elif 80 <= umm < 95: bar = "————————◉—"
-        else: bar = "◉—————————" 
-        return f"{bar}"
+        return "◉————————————"
     except:
         return "◉—————————"
 
@@ -39,7 +27,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
 
-    # 0. Auto-Delete User Command
+    # 0. Auto-Delete Command
     try: await update.message.delete()
     except: pass
 
@@ -60,9 +48,9 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
 
-    # --- 🔥 VC CHECK & ASSISTANT JOIN LOGIC ---
+    # --- 🔥 ROBUST ASSISTANT JOIN LOGIC (FROM PRINCEMUSIC) ---
     try:
-        # Step A: Check if Assistant is in Group
+        # Step A: Check if Assistant is Banned
         try:
             assistant_member = await chat.get_member(int(ASSISTANT_ID))
             if assistant_member.status in ["kicked", "banned"]:
@@ -74,21 +62,43 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
         except: pass
 
-        # Step B: Try to Join VC (Group Join Fix)
+        # Step B: Try to Join VC
         try:
-            invite_link = await context.bot.export_chat_invite_link(chat.id)
-            # ✅ IMPORTANT FIX: Using 'worker_app' (Client) to join, not 'worker' (PyTgCalls)
+            # 1. Get Invite Link
+            try:
+                invite_link = await context.bot.export_chat_invite_link(chat.id)
+            except:
+                await status_msg.edit_text("<blockquote>⚠️ <b>Admin Rights Needed!</b>\nI need 'Invite Users' permission to add Assistant.</blockquote>", parse_mode=ParseMode.HTML)
+                return
+
+            # 2. Fix Link (t.me/+ -> joinchat)
+            if "+" in invite_link:
+                try:
+                    link_hash = invite_link.split("+")[1]
+                    invite_link = f"https://t.me/joinchat/{link_hash}"
+                except: pass
+
+            # 3. Join via Client
             await worker_app.join_chat(invite_link)
+
+        except UserAlreadyParticipant:
+            pass # Already there, all good
+        
+        except InviteRequestSent:
+            # 🔥 AUTO APPROVE LOGIC (PrinceMusic Style)
+            try:
+                await context.bot.approve_chat_join_request(chat_id=chat.id, user_id=int(ASSISTANT_ID))
+                await asyncio.sleep(2) # Wait for join
+            except Exception as e:
+                await status_msg.edit_text(f"<blockquote>⚠️ <b>Join Request Pending</b>\nAccept the join request of Assistant manually.</blockquote>", parse_mode=ParseMode.HTML)
+                return
+        
         except Exception as e:
-            err_str = str(e).lower()
-            if "already" in err_str or "participant" in err_str:
-                pass 
-            else:
-                # Log error but don't stop, controller might handle it
-                print(f"⚠️ Join Error: {e}")
+            # Agar koi aur error ho, toh print karo par roko mat (Controller handle karega)
+            print(f"⚠️ Join Error: {e}")
 
     except Exception as e:
-        print(f"Main Logic Error: {e}")
+        print(f"Main Join Logic Error: {e}")
 
     # --- CONTROLLER LOGIC ---
     error, data = await process_stream(chat.id, user.first_name, query)
@@ -101,28 +111,20 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Data Extract & Shortening Title
+    # Data Extract
     raw_title = data["title"]
-    if len(raw_title) > 30:
-        short_title = raw_title[:30] + "..."
-    else:
-        short_title = raw_title
-
-    safe_title = html.escape(short_title)
+    safe_title = html.escape(raw_title[:30] + "..." if len(raw_title) > 30 else raw_title)
     safe_user = html.escape(data["user"])
-
     duration = data["duration"]
     link = data["link"]
     img_url = data.get("thumbnail", data.get("img_url"))
 
-    # 🔥 Progress Bar Generate
+    # 🔥 Progress Bar
     bar_display = get_progress_bar(duration)
 
     # 🔥 BUTTONS
     buttons = [
-        [
-            InlineKeyboardButton(f"00:00 {bar_display} {duration}", callback_data="GetTimer")
-        ],
+        [InlineKeyboardButton(f"00:00 {bar_display} {duration}", callback_data="GetTimer")],
         [
             InlineKeyboardButton("II", callback_data="music_pause"),
             InlineKeyboardButton("▶", callback_data="music_resume"),
@@ -133,22 +135,20 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🍫 ʏᴏᴜᴛᴜʙᴇ", url=link),
             InlineKeyboardButton(f"🍷 ꜱᴜᴘᴘᴏʀᴛ", url=INSTAGRAM_LINK)
         ],
-        [
-            InlineKeyboardButton("🗑 ᴄʟᴏsᴇ ᴘʟᴀʏᴇʀ", callback_data="force_close")
-        ]
+        [InlineKeyboardButton("🗑 ᴄʟᴏsᴇ ᴘʟᴀʏᴇʀ", callback_data="force_close")]
     ]
     markup = InlineKeyboardMarkup(buttons)
 
-    # --- MESSAGE SENDING LOGIC ---
+    # --- MESSAGE SENDING ---
     try: await status_msg.delete()
     except: pass
 
-    if data["status"] is True:
+    # Caption Logic
+    if data["status"] is True: # Playing Now
         if chat.id in LAST_MSG_ID:
             try: await context.bot.delete_message(chat.id, LAST_MSG_ID[chat.id])
             except: pass
-
-        # 🔥 UPDATED CAPTION (English)
+        
         caption = f"""
 <blockquote><b>✅ sᴛᴀʀᴛᴇᴅ sᴛʀᴇᴀᴍɪɴɢ</b></blockquote>
 
@@ -160,11 +160,9 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             msg = await context.bot.send_photo(chat.id, photo=img_url, caption=caption, has_spoiler=True, reply_markup=markup, parse_mode=ParseMode.HTML)
             LAST_MSG_ID[chat.id] = msg.message_id
-        except Exception as e:
-            await context.bot.send_message(chat.id, caption, reply_markup=markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        except: pass
 
-    else:
-        # Queue Caption (English)
+    else: # Added to Queue
         caption = f"""
 <blockquote><b>📝 ᴀᴅᴅᴇᴅ ᴛᴏ ǫᴜᴇᴜᴇ</b></blockquote>
 
@@ -174,23 +172,21 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <b>🫧 ʀᴇǫᴜᴇsᴛᴇᴅ ʙʏ :</b> {safe_user}</blockquote>
 <blockquote><b>🍫ᴘᴏᴡᴇʀᴇᴅ ʙʏ :</b> {OWNER_NAME}</blockquote>
 """
-        q_msg = await context.bot.send_photo(chat.id, photo=img_url, caption=caption, has_spoiler=True, reply_markup=markup, parse_mode=ParseMode.HTML)
-        key = f"{chat.id}-{safe_title}"
-        QUEUE_MSG_ID[key] = q_msg.message_id
+        try:
+            q_msg = await context.bot.send_photo(chat.id, photo=img_url, caption=caption, has_spoiler=True, reply_markup=markup, parse_mode=ParseMode.HTML)
+            QUEUE_MSG_ID[f"{chat.id}-{safe_title}"] = q_msg.message_id
+        except: pass
 
-
-# --- UNBAN CALLBACK (Translated to English) ---
+# --- UNBAN CALLBACK ---
 async def unban_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chat = update.effective_chat
-
     user = await chat.get_member(query.from_user.id)
     if user.status not in ["creator", "administrator"]:
-        return await query.answer("❌ Only Admins can unban the Assistant!", show_alert=True)
-
+        return await query.answer("❌ Only Admins can unban!", show_alert=True)
     try:
         await chat.unban_member(int(ASSISTANT_ID))
-        await query.message.edit_text("<blockquote>✅ <b>Assistant Unbanned!</b>\nNow try /play again.</blockquote>", parse_mode=ParseMode.HTML)
+        await query.message.edit_text("<blockquote>✅ <b>Assistant Unbanned!</b></blockquote>", parse_mode=ParseMode.HTML)
     except Exception as e:
         await query.answer(f"Error: {e}", show_alert=True)
 
@@ -198,7 +194,6 @@ async def unban_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     command = update.message.text.split()[0].replace("/", "").lower()
-
     try: await update.message.delete()
     except: pass
     
