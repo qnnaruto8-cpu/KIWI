@@ -8,12 +8,12 @@ from telegram.error import TelegramError
 
 # Imports
 from tools.controller import process_stream
-# ✅ FIX: 'worker' ki jagah 'worker_app' import kiya (Client joining ke liye)
+# ✅ FIX: Imported 'worker_app' for Client joining (prevents Invite Hash Expired)
 from tools.stream import stop_stream, skip_stream, pause_stream, resume_stream, worker, worker_app
 from tools.stream import LAST_MSG_ID, QUEUE_MSG_ID
 from config import OWNER_NAME, ASSISTANT_ID, INSTAGRAM_LINK, BOT_NAME
 
-# --- HELPER: PROGRESS BAR LOGIC ---
+# --- HELPER: PROGRESS BAR LOGIC (UNCHANGED) ---
 def get_progress_bar(duration):
     """
     Static aesthetic progress bar.
@@ -77,17 +77,15 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Step B: Try to Join VC (Group Join Fix)
         try:
             invite_link = await context.bot.export_chat_invite_link(chat.id)
-            # ✅ IMPORTANT FIX: 'worker_app' use kiya (Client), 'worker' nahi (PyTgCalls)
+            # ✅ IMPORTANT FIX: Using 'worker_app' (Client) to join, not 'worker' (PyTgCalls)
             await worker_app.join_chat(invite_link)
         except Exception as e:
             err_str = str(e).lower()
             if "already" in err_str or "participant" in err_str:
                 pass 
             else:
-                # Sirf tab error dikhao jab sach mein join na ho paye
+                # Log error but don't stop, controller might handle it
                 print(f"⚠️ Join Error: {e}")
-                # Note: Agar yahan error aaye to zaruri nahi VC off ho, shayad link expire ho
-                # Isliye hum ignore karke aage badhenge, controller handle karega
 
     except Exception as e:
         print(f"Main Logic Error: {e}")
@@ -133,7 +131,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("🍫 ʏᴏᴜᴛᴜʙᴇ", url=link),
-            InlineKeyboardButton(f"🍷ꜱᴜᴘᴘᴏʀᴛ", url=INSTAGRAM_LINK)
+            InlineKeyboardButton(f"🍷 ꜱᴜᴘᴘᴏʀᴛ", url=INSTAGRAM_LINK)
         ],
         [
             InlineKeyboardButton("🗑 ᴄʟᴏsᴇ ᴘʟᴀʏᴇʀ", callback_data="force_close")
@@ -150,7 +148,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try: await context.bot.delete_message(chat.id, LAST_MSG_ID[chat.id])
             except: pass
 
-        # 🔥 UPDATED CAPTION (Separate Blockquotes)
+        # 🔥 UPDATED CAPTION (English)
         caption = f"""
 <blockquote><b>✅ sᴛᴀʀᴛᴇᴅ sᴛʀᴇᴀᴍɪɴɢ</b></blockquote>
 
@@ -166,7 +164,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat.id, caption, reply_markup=markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
     else:
-        # Queue Caption
+        # Queue Caption (English)
         caption = f"""
 <blockquote><b>📝 ᴀᴅᴅᴇᴅ ᴛᴏ ǫᴜᴇᴜᴇ</b></blockquote>
 
@@ -181,18 +179,18 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         QUEUE_MSG_ID[key] = q_msg.message_id
 
 
-# --- UNBAN CALLBACK ---
+# --- UNBAN CALLBACK (Translated to English) ---
 async def unban_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chat = update.effective_chat
 
     user = await chat.get_member(query.from_user.id)
     if user.status not in ["creator", "administrator"]:
-        return await query.answer("❌ Sirf Admin Unban kar sakta hai!", show_alert=True)
+        return await query.answer("❌ Only Admins can unban the Assistant!", show_alert=True)
 
     try:
         await chat.unban_member(int(ASSISTANT_ID))
-        await query.message.edit_text("<blockquote>✅ <b>Assistant Unbanned!</b>\nAb /play try karo.</blockquote>", parse_mode=ParseMode.HTML)
+        await query.message.edit_text("<blockquote>✅ <b>Assistant Unbanned!</b>\nNow try /play again.</blockquote>", parse_mode=ParseMode.HTML)
     except Exception as e:
         await query.answer(f"Error: {e}", show_alert=True)
 
@@ -203,7 +201,7 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try: await update.message.delete()
     except: pass
-
+    
     msg_text = ""
     if command in ["stop", "end"]:
         await stop_stream(chat_id)
@@ -232,4 +230,4 @@ def register_handlers(app):
     app.add_handler(CommandHandler(["stop", "end", "skip", "next", "pause", "resume"], stop_command))
     app.add_handler(CallbackQueryHandler(unban_cb, pattern="unban_assistant"))
     print("  ✅ Music Module Loaded: Auto-Join & Anti-Ban!")
-    
+
