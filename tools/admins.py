@@ -88,14 +88,13 @@ async def show_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for ad in admin_list:
             text += f"└ {ad}\n"
     else:
-        # Agar Owner ke alawa koi human admin nahi hai
         if not owner: text += "❌ ɴᴏ ʜᴜᴍᴀɴ ᴀᴅᴍɪɴs ꜰᴏᴜɴᴅ."
         
     text += "</blockquote>"
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
-# --- 2. BOTS LIST COMMAND (BOTS ONLY) ---
+# --- 2. BOTS LIST COMMAND (ADMIN BOTS ONLY) ---
 async def show_bot_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if chat.type == "private": return
@@ -122,7 +121,8 @@ async def show_bot_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for b in bot_list:
             text += f"└ {b}\n"
     else:
-        text += "❌ ɴᴏ ᴀᴅᴍɪɴ ʙᴏᴛs ꜰᴏᴜɴᴅ."
+        # Note for user why list is empty
+        text += "❌ ɴᴏ ᴀᴅᴍɪɴ ʙᴏᴛs ꜰᴏᴜɴᴅ.\n(Only Admin bots are visible)"
     text += "</blockquote>"
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
@@ -132,11 +132,12 @@ def register_handlers(app):
     # ON/OFF
     app.add_handler(CommandHandler(["admincmd", "adminmode"], toggle_admincmd))
     
-    # Admin List (Regex for /admin and .admin)
-    app.add_handler(MessageHandler(filters.Regex(r"^[./]admin$"), show_admin_list))
+    # ✅ FIX 1: Admin List (Regex updated for 'admin' AND 'admins')
+    # (?i) ka matlab case insensitive (Admin, ADMIN, admin sab chalega)
+    app.add_handler(MessageHandler(filters.Regex(r"(?i)^[./]admins?$"), show_admin_list))
     
-    # Bot List (Regex for /bots and .bots)
-    app.add_handler(MessageHandler(filters.Regex(r"^[./]bots$"), show_bot_list))
+    # ✅ FIX 2: Bot List (Regex updated for 'bot' AND 'bots')
+    app.add_handler(MessageHandler(filters.Regex(r"(?i)^[./]bots?$"), show_bot_list))
     
     print("  ✅ Admin & Bot List Tools Loaded!")
     
