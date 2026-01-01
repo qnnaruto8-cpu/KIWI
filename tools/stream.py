@@ -11,18 +11,6 @@ from config import API_ID, API_HASH, SESSION, BOT_TOKEN, OWNER_NAME, LOG_GROUP_I
 from tools.queue import put_queue, pop_queue, clear_queue, get_queue
 from tools.database import is_active_chat, add_active_chat, remove_active_chat
 
-# --- 🔥 MAGIC PATCH (Anti-Crash Fix) 🔥 ---
-# Ye code us bug ko fix karega jo 'chat_id' missing bata raha hai
-try:
-    from pyrogram.raw.types import UpdateGroupCall
-    # Agar chat_id attribute nahi hai, toh hum fake bana denge
-    if not hasattr(UpdateGroupCall, "chat_id"):
-        # Hum 'chat' attribute ko hi 'chat_id' bana rahe hain taaki error na aaye
-        UpdateGroupCall.chat_id = property(lambda self: self.chat if isinstance(self.chat, int) else 0)
-    print("✅ Anti-Crash Patch Applied Successfully!")
-except Exception as e:
-    print(f"⚠️ Patch Warning: {e}")
-
 # --- GLOBAL DICTIONARIES ---
 LAST_MSG_ID = {}   
 
@@ -108,18 +96,13 @@ async def send_now_playing(chat_id, song_data):
         print(f"❌ UI Error: {e}")
         return False
 
-# --- 🔥 STARTUP LOGIC (NON-BLOCKING) ---
+# --- 🔥 STARTUP LOGIC ---
 async def start_music_worker():
-    print("🔵 Starting Music Assistant (Background Mode)...")
-    # Hum isko background task bana rahe hain taaki agar ye crash bhi ho,
-    # toh Main Bot aage badh jaye aur plugins load ho jayein.
-    asyncio.create_task(run_worker_safely())
-
-async def run_worker_safely():
+    print("🔵 Starting Music Assistant (VIP Style)...")
     try:
         await worker_app.start()
         await worker.start()
-        print("✅ Assistant & PyTgCalls Started Successfully!")
+        print("✅ Assistant & PyTgCalls Started!")
 
         if LOG_GROUP_ID:
             try:
@@ -129,8 +112,7 @@ async def run_worker_safely():
                 )
             except: pass
     except Exception as e:
-        # Error ko sirf print karenge, process kill nahi karenge
-        print(f"⚠️ Assistant Error (Ignored): {e}")
+        print(f"❌ Assistant Error: {e}")
 
 # --- 1. PLAY LOGIC (Force Join Fix) ---
 async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail):
