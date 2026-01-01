@@ -5,25 +5,23 @@ from tools.thumbnails import get_thumb
 from tools.database import get_db_queue
 from tools.queue import clear_queue 
 
-# 🔥 IMPORTANT IMPORT: Ye bot ko freeze hone se bachaega
-from tools.utils import run_sync 
-
 # Initialize YouTube
 YouTube = YouTubeAPI()
 
 async def process_stream(chat_id, user_name, query):
     """
     Complete Flow: Search -> VC Check -> Download -> Thumbnail -> Stream/Queue
-    Updated with NON-BLOCKING Logic 🚀
     """
     
-    # --- 1. SEARCHING (Non-Blocking) ---
+    # --- 1. SEARCHING ---
     try:
+        # Link hai ya Name? check karke details nikalo
         if "youtube.com" in query or "youtu.be" in query:
-             # Agar Link hai (Background me info nikalo)
-             title = await run_sync(YouTube.title, query)
-             duration = await run_sync(YouTube.duration, query)
-             thumbnail = await run_sync(YouTube.thumbnail, query)
+             # Agar Link hai
+             # NOTE: Ye functions async hain, inpe run_sync mat lagana
+             title = await YouTube.title(query)
+             duration = await YouTube.duration(query)
+             thumbnail = await YouTube.thumbnail(query)
              
              if "v=" in query:
                  vidid = query.split("v=")[-1].split("&")[0]
@@ -31,9 +29,9 @@ async def process_stream(chat_id, user_name, query):
                  vidid = query.split("/")[-1]
              link = query
         else:
-            # Agar Name hai (Background Search)
-            # 'run_sync' use kiya taaki bot search karte time atke nahi
-            result, vidid = await run_sync(YouTube.track, query)
+            # Agar Name hai (Search)
+            # 🔥 FIX: Yahan se run_sync hataya hai kyunki YouTube.track async hai
+            result, vidid = await YouTube.track(query)
             
             if not result:
                 return "❌ Song not found.", None
@@ -45,7 +43,7 @@ async def process_stream(chat_id, user_name, query):
     except Exception as e:
         return f"❌ Search Error: {e}", None
 
-    # --- VC STATUS CHECK (Existing Logic) ---
+    # --- VC STATUS CHECK ---
     try:
         queue = await get_db_queue(chat_id)
         is_streaming = False
@@ -56,6 +54,7 @@ async def process_stream(chat_id, user_name, query):
         except:
             pass
 
+        # Agar Queue hai par Streaming nahi ho rahi -> Clear Queue (Reset)
         if queue and not is_streaming:
             await clear_queue(chat_id)
             print(f"🧹 Queue Cleared for {chat_id} (VC was Closed)")
@@ -63,17 +62,15 @@ async def process_stream(chat_id, user_name, query):
     except Exception as e:
         print(f"VC Check Error: {e}")
 
-    # --- 2. THUMBNAIL GENERATION (Non-Blocking) ---
-    # Image processing heavy hoti hai, isliye background me dala
-    final_thumb = await run_sync(get_thumb, vidid)
+    # --- 2. THUMBNAIL GENERATION ---
+    final_thumb = await get_thumb(vidid)
     if not final_thumb:
         final_thumb = thumbnail 
 
-    # --- 3. DOWNLOADING (Non-Blocking) ---
+    # --- 3. DOWNLOADING ---
     try:
-        # Sabse heavy kaam (Download) ab background me hoga 🚀
-        file_path, direct = await run_sync(
-            YouTube.download,
+        # 🔥 FIX: Yahan se bhi run_sync hataya
+        file_path, direct = await YouTube.download(
             link, 
             mystic=None,
             title=title,
@@ -83,7 +80,6 @@ async def process_stream(chat_id, user_name, query):
         return f"❌ Download Error: {e}", None
 
     # --- 4. PLAYING / QUEUING ---
-    # Play Stream already async hai, isko wrap karne ki need nahi
     status, position = await play_stream(
         chat_id, 
         file_path, 
