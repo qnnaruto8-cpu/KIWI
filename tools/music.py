@@ -10,10 +10,12 @@ from pyrogram.errors import InviteRequestSent, UserAlreadyParticipant, UserNotPa
 
 # Imports
 from tools.controller import process_stream
-# ✅ worker_app imported for Client Joining
 from tools.stream import stop_stream, skip_stream, pause_stream, resume_stream, worker_app
 from tools.stream import LAST_MSG_ID, QUEUE_MSG_ID
 from config import OWNER_NAME, ASSISTANT_ID, INSTAGRAM_LINK
+
+# ✅ NEW IMPORT: Database se status check karne ke liye
+from tools.database import get_music_status 
 
 # --- HELPER: PROGRESS BAR ---
 def get_progress_bar(duration):
@@ -27,7 +29,21 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
 
-    # 0. Auto-Delete Command
+    # 🔥🔥 1. GLOBAL MUSIC CHECK (SABSE PEHLE YAHAN AAYEGA) 🔥🔥
+    is_active, reason = await get_music_status()
+    if not is_active:
+        # Agar Reason hai to batao aur delete karo
+        if reason:
+            msg = await update.message.reply_text(f"🚧 **ᴍᴜsɪᴄ ɪs ᴏꜰꜰ!**\nReason: `{reason}`")
+            await asyncio.sleep(4)
+            await msg.delete()
+            return
+        # Agar Reason nahi hai to chup chap return (Silent Mode)
+        else:
+            return 
+    # 🔥🔥 CHECK END 🔥🔥
+
+    # 2. Auto-Delete Command
     try: await update.message.delete()
     except: pass
 
@@ -40,7 +56,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = " ".join(context.args)
 
-    # 1. Searching Message
+    # 3. Searching Message
     status_msg = await context.bot.send_message(
         chat.id,
         f"🍭",
@@ -48,7 +64,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
 
-    # --- 🔥 ROBUST ASSISTANT JOIN LOGIC (FROM PRINCEMUSIC) ---
+    # --- 🔥 ROBUST ASSISTANT JOIN LOGIC ---
     try:
         # Step A: Check if Assistant is Banned
         try:
@@ -64,37 +80,32 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Step B: Try to Join VC
         try:
-            # 1. Get Invite Link
             try:
                 invite_link = await context.bot.export_chat_invite_link(chat.id)
             except:
                 await status_msg.edit_text("<blockquote>⚠️ <b>Admin Rights Needed!</b>\nI need 'Invite Users' permission to add Assistant.</blockquote>", parse_mode=ParseMode.HTML)
                 return
 
-            # 2. Fix Link (t.me/+ -> joinchat)
             if "+" in invite_link:
                 try:
                     link_hash = invite_link.split("+")[1]
                     invite_link = f"https://t.me/joinchat/{link_hash}"
                 except: pass
 
-            # 3. Join via Client
             await worker_app.join_chat(invite_link)
 
         except UserAlreadyParticipant:
-            pass # Already there, all good
+            pass 
         
         except InviteRequestSent:
-            # 🔥 AUTO APPROVE LOGIC (PrinceMusic Style)
             try:
                 await context.bot.approve_chat_join_request(chat_id=chat.id, user_id=int(ASSISTANT_ID))
-                await asyncio.sleep(2) # Wait for join
+                await asyncio.sleep(2) 
             except Exception as e:
                 await status_msg.edit_text(f"<blockquote>⚠️ <b>Join Request Pending</b>\nAccept the join request of Assistant manually.</blockquote>", parse_mode=ParseMode.HTML)
                 return
         
         except Exception as e:
-            # Agar koi aur error ho, toh print karo par roko mat (Controller handle karega)
             print(f"⚠️ Join Error: {e}")
 
     except Exception as e:
@@ -119,7 +130,6 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = data["link"]
     img_url = data.get("thumbnail", data.get("img_url"))
 
-    # 🔥 Progress Bar
     bar_display = get_progress_bar(duration)
 
     # 🔥 BUTTONS
@@ -139,7 +149,6 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     markup = InlineKeyboardMarkup(buttons)
 
-    # --- MESSAGE SENDING ---
     try: await status_msg.delete()
     except: pass
 
