@@ -15,6 +15,7 @@ from tools.database import is_active_chat, add_active_chat, remove_active_chat
 
 # --- GLOBAL DICTIONARIES ---
 LAST_MSG_ID = {}   
+QUEUE_MSG_ID = {}  # ✅ Added back to fix Import Error
 
 # --- ⚠️ SAFE CLIENT SETUP ---
 print("🟡 [STREAM] Loading Music Module...")
@@ -44,7 +45,7 @@ main_bot = Bot(token=BOT_TOKEN)
 def get_progress_bar(duration):
     return "◉————————————"
 
-# --- 🔥 HELPER: SAFE UI SENDER (Crashing Fix) ---
+# --- 🔥 HELPER: SAFE UI SENDER (Anti-Crash) ---
 async def send_now_playing(chat_id, song_data):
     """
     Ye function fail hone par bhi music nahi rokega.
@@ -57,7 +58,6 @@ async def send_now_playing(chat_id, song_data):
             except: pass
         
         # 🛡️ HTML ESCAPE (Parsing Error Fix)
-        # Isse 'Can't parse entities' wala error khatam ho jayega
         title = html.escape(str(song_data["title"]))
         user = html.escape(str(song_data["by"]))
         duration = str(song_data["duration"])
@@ -107,7 +107,6 @@ async def send_now_playing(chat_id, song_data):
         return True
 
     except Exception as e:
-        # Agar UI fail hua, to Music mat roko, bas error print karo
         print(f"⚠️ [UI ERROR] Message nahi gaya, par music chalega. Error: {e}")
         return False
 
@@ -171,7 +170,6 @@ async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail
         err_str = str(e).lower()
         print(f"⚠️ Play Error in {chat_id}: {e}")
 
-        # 🔥 HASH EXPIRED FIX:
         if "invite_hash_expired" in err_str or "expired" in err_str:
             return None, "❌ **Link Expired!** Assistant ko group se remove karke wapis add karo."
         
@@ -190,7 +188,7 @@ async def play_stream(chat_id, file_path, title, duration, user, link, thumbnail
         
         return None, str(e)
 
-# --- 2. STREAM END HANDLER (Fixed) ---
+# --- 2. STREAM END HANDLER (Safe) ---
 if worker:
     @worker.on_stream_end()
     async def stream_end_handler(client, update: Update):
@@ -224,7 +222,7 @@ if worker:
                     await asyncio.sleep(1)
                     await worker.join_group_call(chat_id, stream)
                 
-                # UI Send karo (Safe Function)
+                # UI Send karo
                 await send_now_playing(chat_id, next_song)
 
             except Exception as e:
