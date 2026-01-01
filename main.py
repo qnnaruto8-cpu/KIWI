@@ -24,6 +24,9 @@ from tts import generate_voice
 from tools.stream import start_music_worker
 import tools.stream 
 
+# ✅ Broadcast Import (NEW ADDITION)
+from tools.broadcast import register_broadcast_handlers
+
 # MODULES 
 import admin, start, group, leaderboard, pay, bet, wordseek, chatstat, logger, events, info, tictactoe, couple
 import livetime  
@@ -60,6 +63,10 @@ def load_plugins(application: Application):
 
     for file in path_list:
         module_name = file[:-3]
+        # Hum Broadcast ko manual load kar rahe hain, isliye yahan skip kar sakte hain
+        if module_name == "broadcast": 
+            continue
+            
         try:
             module = importlib.import_module(f"{plugin_dir}.{module_name}")
             if hasattr(module, "register_handlers"):
@@ -433,6 +440,9 @@ def main():
     # 🔥 Plugins LOAD (Music vagera)
     load_plugins(app)
 
+    # 🔥 REGISTER BROADCAST HANDLER (MANUAL)
+    register_broadcast_handlers(app)
+
     # Note: 'handle_message' catches ALL text, so it must be last
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
     
@@ -441,4 +451,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                                               
+        
