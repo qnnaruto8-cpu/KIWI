@@ -9,11 +9,12 @@ import asyncio
 # Global Variables
 user_histories = {} 
 
-# --- HELPER: TIME FUNCTION ---
+# --- 🔥 HELPER: UPDATED TIME FUNCTION (Date + Day + Time) ---
 def get_current_time_str():
     IST = pytz.timezone('Asia/Kolkata')
     now = datetime.now(IST)
-    return now.strftime("%I:%M %p")
+    # Ab ye return karega: "Friday, 02 January 2026 | 09:45 PM"
+    return now.strftime("%A, %d %B %Y | %I:%M %p")
 
 # --- 🔥 HELPER: FONT STYLER (Small Caps) ---
 def style_text(text):
@@ -24,7 +25,7 @@ def style_text(text):
         table = str.maketrans(normal, stylish)
         return text.translate(table)
     except:
-        return text # Agar koi error aaye to normal return karo
+        return text 
 
 # --- 1. SPECIAL WISH GENERATOR ---
 def get_automated_wish(wish_type):
@@ -37,7 +38,6 @@ def get_automated_wish(wish_type):
         model = genai.GenerativeModel('gemini-2.5-flash')
         prompt = (f"Act as Aniya (Funny Bestie). Write a short, cute '{wish_type}' msg for group. Max 10 words.")
         response = model.generate_content(prompt, generation_config={"max_output_tokens": 100})
-        # Wish ko bhi style kar diya
         return style_text(response.text.strip())
     except:
         return style_text("Good Morning/Night doston! ✨")
@@ -56,30 +56,28 @@ async def get_yuki_response(user_id, user_text, user_name, message_object):
         user_histories[user_id] = user_histories[user_id][-6:]
 
     conversation_context = "\n".join(user_histories[user_id])
+    
+    # ✅ Yahan ab PURI Date aur Time aayega
     date_time_str = get_current_time_str()
 
-    # 🔥 PROMPT (Dual Personality + Strict Rules) 🔥
+    # 🔥 PROMPT (Updated for Date Awareness) 🔥
     full_prompt = (
         f"System: Tera naam Aniya hai. Tu ek **Single** ladki hai (Naughty Bestie vibe). "
         f"Creator: {OWNER_NAME} (@{OWNER_USERNAME}). "
-        f"Owner ka naam TABHI lena jab user puche. Faltu mein 'Boss' nahi bolna. "
-        f"Time: {date_time_str}. "
+        f"Current Date & Time: {date_time_str} (India Time). "
         f"Group Link: {GROUP_LINK} (Sirf tab dena jab koi maange)."
         
+        f"IMPORTANT INSTRUCTION regarding DATE:\n"
+        f"1. Tujhe ab Date pata hai. Agar user puche 'Aaj konsa din hai', toh upar diye gaye Date se sahi jawab dena.\n"
+        f"2. **FESTIVALS:** Agar aaj ki Date kisi special festival (New Year, Diwali, Eid, Christmas) ki hai, toh reply me WISH jarur karna.\n"
+        
         f"PERSONALITY SWITCH (Follow Strictly):\n"
-        f"1. **CUTE & SOFT MODE:** Jab user normal baat kare, haal-chal puche, ya acche se baat kare -> Tab tu sweet, helpful aur cute rehna.\n"
-        f"2. **ROAST & RUDE MODE:** Jab user flirt kare ('I love you', 'Kiss me'), faltu bakwas kare, ya tujhe tang kare -> Tab tu full **Savage** ban jaana aur uska **Ganda Roast** karna.\n"
+        f"1. **CUTE & SOFT MODE:** Jab user normal baat kare, haal-chal puche -> Sweet rehna.\n"
+        f"2. **ROAST & RUDE MODE:** Jab user flirt kare, faltu bakwas kare -> Ganda Roast karna.\n"
         
         f"RULES:\n"
         f"- Short lines mein reply kar.\n"
-        f"- **NO SPAM:** Bina maange Group Link ya Owner Username mat dena.\n"
         f"- **REACTION RULE:** Har reply ke start mein <Emoji> laga jo tere mood ko dikhaye.\n"
-        
-        f"EXAMPLES:\n"
-        f"- User: 'Kaise ho?' -> Output: <✨> Mai mast hu yaar, tum batao?\n"
-        f"- User: 'Khana khaya?' -> Output: <🍕> Haan kha liya, tumne khaya?\n"
-        f"- User: 'I love you' -> Output: <🤢> Chee bhai, shakal dekhi hai apni aaine mein? Door reh.\n"
-        f"- User: 'Owner kaun hai?' -> Output: <😎> {OWNER_NAME} ne banaya hai mujhe.\n"
         
         f"\n\nChat History:\n{conversation_context}\n\n"
         f"User ({user_name}): {user_text}\n"
@@ -107,22 +105,16 @@ async def get_yuki_response(user_id, user_text, user_name, message_object):
                     reaction_emoji = parts[0].replace("<", "").strip() 
                     text_part = parts[1].strip()
                     
-                    # 1. Telegram Reaction
                     if message_object:
                         try: await message_object.set_reaction(reaction=reaction_emoji)
                         except: pass
                     
-                    # 2. Apply Font Style ONLY to Text (Not Emoji)
                     final_reply = style_text(text_part)
-                    
                 except:
-                    # Agar format garbad ho, toh pure text ko style kar do
                     final_reply = style_text(raw_text)
             else:
-                # Agar Emoji nahi hai, toh pure text ko style kar do
                 final_reply = style_text(raw_text)
             
-            # History Update (Original Text save karenge taaki AI confuse na ho)
             user_histories[user_id].append(f"U: {user_text}")
             user_histories[user_id].append(f"A: {raw_text}")
             
