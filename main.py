@@ -21,9 +21,9 @@ from tts import generate_voice
 
 # ✅ Music Assistant Import
 from tools.stream import start_music_worker
-import tools.stream 
+import tools.stream # ✅ Button Logic ke liye ye zaroori hai
 
-# MODULES 
+# MODULES (Removed 'grouptools')
 import admin, start, group, leaderboard, pay, bet, wordseek, chatstat, logger, events, info, tictactoe, couple
 import livetime  
 import dmspam 
@@ -65,8 +65,7 @@ def load_plugins(application: Application):
                 module.register_handlers(application)
                 print(f"  ✅ Loaded: {module_name}")
         except Exception as e:
-            print(f"  ❌ FAILED to load {module_name}!")
-            print(f"     Error: {e}")
+            print(f"  ❌ Failed to load {module_name}: {e}")
 
 # --- STARTUP MESSAGE ---
 async def on_startup(application: Application):
@@ -81,8 +80,7 @@ async def on_startup(application: Application):
             me = await application.bot.get_me()
             txt = f"<blockquote><b>{BOT_NAME}ʙᴏᴛ active 🍭</b></blockquote>\n@{me.username}"
             await application.bot.send_message(chat_id=logger_id, text=txt, parse_mode=ParseMode.HTML)
-        except Exception as e: 
-            print(f"⚠️ Logger Error: {e}")
+        except: pass
 
 # --- SHOP MENU ---
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,14 +109,14 @@ async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     codes_col.update_one({"code": code}, {"$push": {"redeemed_by": user.id}})
     await update.message.reply_text(f"🎉 Redeemed ₹{data['amount']}!")
 
-# --- CALLBACK HANDLER ---
+# --- CALLBACK HANDLER (UPDATED WITH MUSIC CONTROLS) ---
 async def callback_handler(update, context):
     q = update.callback_query
     data = q.data
     uid = q.from_user.id
     chat_id = update.effective_chat.id
     
-    # 🔥 1. MUSIC PLAYER CONTROLS
+    # 🔥 1. MUSIC PLAYER CONTROLS (Pause/Skip/Stop)
     if data.startswith("music_"):
         await q.answer()
         action = data.split("_")[1]
@@ -138,7 +136,7 @@ async def callback_handler(update, context):
             await q.message.reply_text("⏹ Stream Stopped", quote=True)
         return
 
-    # 🔥 2. FORCE CLOSE
+    # 🔥 2. FORCE CLOSE BUTTON (Error Msg Delete)
     if data == "force_close":
         try: await q.message.delete()
         except: await q.answer("❌ Delete nahi kar sakta!", show_alert=True)
@@ -148,10 +146,6 @@ async def callback_handler(update, context):
     if data in ["close_log", "close_ping"]:
         try: await q.message.delete()
         except: pass
-        return
-
-    if data == "help_main" or data.startswith("help_"):
-        await start.start_callback(update, context)
         return
 
     if data == "back_home":
@@ -232,7 +226,7 @@ async def callback_handler(update, context):
         await livetime.close_time(update, context)
         return
 
-# --- MESSAGE HANDLER (UPDATED FOR COMPLETE SILENCE) ---
+# --- MESSAGE HANDLER ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     user = update.effective_user
@@ -259,7 +253,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if status == "BLOCKED":
             await update.message.reply_text(f"🚫 **Spam Detected!**\n{user.first_name}, blocked for 8 mins.")
             return
-        elif status == False: return  # ✅ YEH LINE IMPORTANT HAI
+        elif status == False: return  # ✅ ANTI-SPAM LINE ADD KARO
 
     # 3. STATS
     update_username(user.id, user.first_name)
@@ -294,8 +288,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_chat_action(chat_id=chat.id, action="typing")
         
-        # 🔥 AI Response - OLD LOGIC USE KARO
-        ai_reply = get_yuki_response(user.id, text, user.first_name)  # ✅ Purana function call
+        # 🔥 AI Response - FIXED: ONLY 3 PARAMETERS
+        ai_reply = get_yuki_response(user.id, text, user.first_name)  # ✅ 3 parameters only
 
         if wants_voice:
             await context.bot.send_chat_action(chat_id=chat.id, action="record_voice")
@@ -347,14 +341,10 @@ def main():
     app.add_handler(CommandHandler("pay", pay.pay_user))
     app.add_handler(CommandHandler("rob", pay.rob_user))
     app.add_handler(CommandHandler("kill", pay.kill_user))
-    app.add_handler(CommandHandler("revive", pay.revive_command))
     app.add_handler(CommandHandler("protect", pay.protect_user))
     app.add_handler(CommandHandler("alive", pay.check_status))
     app.add_handler(CommandHandler("time", livetime.start_live_time))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
-
-    # 🚫 GCHAT COMMAND REMOVED (Aapke liye)
-    # 🚫 GSTICKER COMMAND REMOVED (Aapke liye)
 
     app.add_handler(CallbackQueryHandler(callback_handler))
     
@@ -366,10 +356,8 @@ def main():
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
-    # 🔥 Plugins LOAD (Music vagera)
     load_plugins(app)
 
-    # Note: 'handle_message' catches ALL text, so it must be last
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
     
     print(f"🚀 {BOT_NAME} STARTED SUCCESSFULLY!")
@@ -377,3 +365,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
