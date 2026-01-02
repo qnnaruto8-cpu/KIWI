@@ -1,263 +1,379 @@
-import html
+import random
+import os
+import importlib 
+from threading import Thread
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import ContextTypes
-# Yahan neeche dhyan dena, maine OWNER_IDS import kiya hai
-from config import OWNER_IDS 
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+
+# IMPORTS
+from config import TELEGRAM_TOKEN, BOT_NAME 
 from database import (
-    users_col, groups_col, codes_col, update_balance, 
-    add_api_key, remove_api_key, get_all_keys,
-    add_game_key, remove_game_key, get_game_keys,
-    add_sticker_pack, remove_sticker_pack, get_sticker_packs,
-    wipe_database, set_economy_status, get_economy_status,
-    set_logger_group, delete_logger_group
+    users_col, codes_col, update_balance, get_balance, 
+    check_registered, register_user, update_group_activity, 
+    update_username, update_chat_stats,
+    is_user_muted, is_user_banned,
+    get_logger_group
 )
+from ai_chat import get_yuki_response, get_mimi_sticker
+from tts import generate_voice 
 
-# Global State
-ADMIN_INPUT_STATE = {} 
+# ✅ Music Assistant Import
+from tools.stream import start_music_worker
+import tools.stream 
 
-# Fancy Font Helper
-def to_fancy(text):
-    mapping = {'A': 'Λ', 'E': 'Є', 'S': 'δ', 'O': 'σ', 'T': 'ᴛ', 'N': 'ɴ', 'M': 'ᴍ', 'U': 'ᴜ', 'R': 'ʀ', 'D': 'ᴅ', 'C': 'ᴄ', 'P': 'ᴘ', 'G': 'ɢ', 'B': 'ʙ', 'L': 'ʟ', 'W': 'ᴡ', 'K': 'ᴋ', 'J': 'ᴊ', 'Y': 'ʏ', 'I': 'ɪ', 'H': 'ʜ'}
-    return "".join(mapping.get(c.upper(), c) for c in text)
+# MODULES 
+import admin, start, group, leaderboard, pay, bet, wordseek, chatstat, logger, events, info, tictactoe, couple
+import livetime  
+import dmspam 
+import bank 
+from bank import check_balance 
+from antispam import check_spam
+import wordgrid 
 
-# --- 1. MAIN ADMIN PANEL ---
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # CHANGE: Ab ye list (OWNER_IDS) me check karega
-    if update.effective_user.id not in OWNER_IDS: 
+# --- FLASK SERVER ---
+app = Flask('')
+@app.route('/')
+def home(): return "I am Alive! 24/7"
+def run(): app.run(host='0.0.0.0', port=8080)
+def keep_alive(): t = Thread(target=run); t.start()
+
+# VARS
+SHOP_ITEMS = {
+    "vip":   {"name": "👑 VIP", "price": 10000},
+    "god":   {"name": "⚡ God", "price": 50000},
+    "rich":  {"name": "💸 Rich", "price": 100000}
+}
+
+# --- 🔌 AUTO LOADER FUNCTION ---
+def load_plugins(application: Application):
+    plugin_dir = "tools"
+    if not os.path.exists(plugin_dir):
+        try: os.makedirs(plugin_dir); print(f"📁 Created '{plugin_dir}' directory.")
+        except: pass
         return
 
-    # Clear old state
-    if update.effective_user.id in ADMIN_INPUT_STATE:
-        del ADMIN_INPUT_STATE[update.effective_user.id]
-    
-    eco_status = "🟢 ON" if get_economy_status() else "🔴 OFF"
-    chat_keys = len(get_all_keys())
-    game_keys = len(get_game_keys())
-    stickers = len(get_sticker_packs())
+    path_list = [f for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
+    print(f"🔌 Loading {len(path_list)} plugins from '{plugin_dir}'...")
 
-    text = f"""
-<blockquote><b>👮‍♂️ {to_fancy('ADMIN CONTROL PANEL')}</b></blockquote>
+    for file in path_list:
+        module_name = file[:-3]
+        try:
+            module = importlib.import_module(f"{plugin_dir}.{module_name}")
+            if hasattr(module, "register_handlers"):
+                module.register_handlers(application)
+                print(f"  ✅ Loaded: {module_name}")
+        except Exception as e:
+            print(f"  ❌ FAILED to load {module_name}!")
+            print(f"     Error: {e}")
 
-<blockquote>
-<b>⚙️ ᴇᴄᴏɴᴏᴍʏ :</b> {eco_status}
-<b>💬 ᴄʜᴀᴛ ᴋᴇʏs :</b> {chat_keys}
-<b>🎮 ɢᴀᴍᴇ ᴋᴇʏs :</b> {game_keys}
-<b>👻 sᴛɪᴄᴋᴇʀs :</b> {stickers}
-</blockquote>
+# --- STARTUP MESSAGE ---
+async def on_startup(application: Application):
+    print(f"🚀 {BOT_NAME} IS STARTING...")
+    print("🔵 Starting Music Assistant...")
+    try: await start_music_worker()
+    except Exception as e: print(f"❌ Assistant Start Failed: {e}")
 
-<blockquote>👇 <b>Select an action below:</b></blockquote>
-"""
+    logger_id = get_logger_group()
+    if logger_id:
+        try:
+            me = await application.bot.get_me()
+            txt = f"<blockquote><b>{BOT_NAME}ʙᴏᴛ active 🍭</b></blockquote>\n@{me.username}"
+            await application.bot.send_message(chat_id=logger_id, text=txt, parse_mode=ParseMode.HTML)
+        except Exception as e: 
+            print(f"⚠️ Logger Error: {e}")
 
-    kb = [
-        [InlineKeyboardButton(f"Economy: {eco_status}", callback_data="admin_toggle_eco")],
-        [InlineKeyboardButton("📢 Broadcast", callback_data="admin_cast_ask"), InlineKeyboardButton("🎁 Create Code", callback_data="admin_code_ask")],
-        [InlineKeyboardButton("💰 Add Money", callback_data="admin_add_ask"), InlineKeyboardButton("💸 Take Money", callback_data="admin_take_ask")],
-        
-        # Keys Management
-        [InlineKeyboardButton("🔑 Chat Keys", callback_data="admin_chat_keys_menu"), InlineKeyboardButton("🎮 Game Keys", callback_data="admin_game_keys_menu")],
-        
-        # Stickers & Logger
-        [InlineKeyboardButton("👻 Stickers", callback_data="admin_stickers_menu"), InlineKeyboardButton("📝 Logger", callback_data="admin_logger_menu")],
-        
-        [InlineKeyboardButton("☢️ WIPE DATA", callback_data="admin_wipe_ask"), InlineKeyboardButton("❌ Close", callback_data="admin_close")]
-    ]
-    
+# --- SHOP MENU ---
+async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+        uid = update.callback_query.from_user.id
+        msg_func = update.callback_query.message.edit_text 
     else:
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+        uid = update.effective_user.id
+        msg_func = update.message.reply_text
 
-# --- 2. CALLBACK HANDLER ---
-async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = []
+    for k, v in SHOP_ITEMS.items():
+        kb.append([InlineKeyboardButton(f"{v['name']} - ₹{v['price']}", callback_data=f"buy_{k}_{uid}")])
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="back_home")])
+    await msg_func("🛒 **VIP SHOP**\nBuy special titles here:", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
+
+async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not context.args: return await update.message.reply_text("⚠️ Usage: `/redeem CODE`")
+    code = context.args[0]
+    data = codes_col.find_one({"code": code})
+    if not data: return await update.message.reply_text("❌ Invalid Code!")
+    if user.id in data["redeemed_by"]: return await update.message.reply_text("⚠️ Already Redeemed!")
+    
+    update_balance(user.id, data["amount"])
+    codes_col.update_one({"code": code}, {"$push": {"redeemed_by": user.id}})
+    await update.message.reply_text(f"🎉 Redeemed ₹{data['amount']}!")
+
+# --- CALLBACK HANDLER ---
+async def callback_handler(update, context):
     q = update.callback_query
     data = q.data
-    user_id = q.from_user.id
+    uid = q.from_user.id
+    chat_id = update.effective_chat.id
     
-    # CHANGE: Ab ye list (OWNER_IDS) me check karega
-    if user_id not in OWNER_IDS:
-        await q.answer("❌ Only Owner can use this!", show_alert=True)
+    # 🔥 1. MUSIC PLAYER CONTROLS
+    if data.startswith("music_"):
+        await q.answer()
+        action = data.split("_")[1]
+        
+        if action == "pause":
+            await tools.stream.pause_stream(chat_id)
+            await q.message.reply_text("II Stream Paused", quote=True)
+        elif action == "resume":
+            await tools.stream.resume_stream(chat_id)
+            await q.message.reply_text("▶ Stream Resumed", quote=True)
+        elif action == "skip":
+            await tools.stream.skip_stream(chat_id)
+            await q.message.reply_text("⏭ Skipped", quote=True)
+        elif action == "stop":
+            await tools.stream.stop_stream(chat_id)
+            await q.message.delete()
+            await q.message.reply_text("⏹ Stream Stopped", quote=True)
         return
 
-    # --- SUB-MENUS ---
-    if data == "admin_chat_keys_menu":
-        kb = [[InlineKeyboardButton("➕ Add Key", callback_data="admin_key_add")], [InlineKeyboardButton("➖ Del Key", callback_data="admin_key_del")], [InlineKeyboardButton("🔙 Back", callback_data="admin_back")]]
-        msg = f"<blockquote><b>🔑 {to_fancy('CHAT API KEYS')} (Gemini)</b></blockquote>"
-        await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+    # 🔥 2. FORCE CLOSE
+    if data == "force_close":
+        try: await q.message.delete()
+        except: await q.answer("❌ Delete nahi kar sakta!", show_alert=True)
         return
 
-    if data == "admin_game_keys_menu":
-        kb = [[InlineKeyboardButton("➕ Add Key", callback_data="admin_game_key_add")], [InlineKeyboardButton("➖ Del Key", callback_data="admin_game_key_del")], [InlineKeyboardButton("🔙 Back", callback_data="admin_back")]]
-        msg = f"<blockquote><b>🎮 {to_fancy('GAME API KEYS')} (WordSeek)</b></blockquote>"
-        await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+    # --- STANDARD HANDLERS ---
+    if data in ["close_log", "close_ping"]:
+        try: await q.message.delete()
+        except: pass
         return
 
-    if data == "admin_stickers_menu":
-        kb = [[InlineKeyboardButton("➕ Add Pack", callback_data="admin_pack_add")], [InlineKeyboardButton("➖ Del Pack", callback_data="admin_pack_del")], [InlineKeyboardButton("🔙 Back", callback_data="admin_back")]]
-        msg = f"<blockquote><b>👻 {to_fancy('STICKER PACKS')}</b></blockquote>"
-        await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+    if data == "help_main" or data.startswith("help_"):
+        await start.start_callback(update, context)
         return
 
-    if data == "admin_logger_menu":
-        kb = [[InlineKeyboardButton("📝 Set Logger", callback_data="admin_set_logger")], [InlineKeyboardButton("🗑 Del Logger", callback_data="admin_del_logger")], [InlineKeyboardButton("🔙 Back", callback_data="admin_back")]]
-        msg = f"<blockquote><b>📝 {to_fancy('LOGGER SETTINGS')}</b></blockquote>"
-        await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+    if data == "back_home":
+        await q.answer()
+        await start.start_callback(update, context)
         return
 
-    # --- INPUT TRIGGERS (ADD & DELETE) ---
+    if data == "open_shop":
+        await q.answer()
+        await shop_menu(update, context)
+        return
     
-    # 1. Chat Keys
-    if data == "admin_key_add":
-        ADMIN_INPUT_STATE[user_id] = 'add_key'
-        await q.edit_message_text(f"<blockquote>➕ <b>Send Gemini API Key:</b></blockquote>", parse_mode=ParseMode.HTML)
-    elif data == "admin_key_del":
-        ADMIN_INPUT_STATE[user_id] = 'del_key'
-        keys = "\n".join([f"<code>{k}</code>" for k in get_all_keys()])
-        msg = f"<blockquote>➖ <b>Send Chat Key to delete:</b></blockquote>\n\n{keys}"
-        await q.edit_message_text(msg, parse_mode=ParseMode.HTML)
+    if data == "open_games":
+        await q.answer()
+        kb = [[InlineKeyboardButton("🔙 Back", callback_data="back_home")]]
+        msg = "🎮 **GAME MENU**\n\n🎲 `/bet` - Bomb Game\n🔠 `/new` - Word Seek\n🔠 `/wordgrid` - Word Grid\n❌ `/zero` - Tic Tac Toe\n💰 `/invest` - Stock Market"
+        await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
+        return
 
-    # 2. Game Keys
-    elif data == "admin_game_key_add":
-        ADMIN_INPUT_STATE[user_id] = 'add_game_key'
-        await q.edit_message_text(f"<blockquote>🎮 <b>Send WordSeek API Key:</b></blockquote>", parse_mode=ParseMode.HTML)
-    elif data == "admin_game_key_del":
-        ADMIN_INPUT_STATE[user_id] = 'del_game_key'
-        keys = "\n".join([f"<code>{k}</code>" for k in get_game_keys()])
-        msg = f"<blockquote>➖ <b>Send Game Key to delete:</b></blockquote>\n\n{keys}"
-        await q.edit_message_text(msg, parse_mode=ParseMode.HTML)
+    if data == "open_ranking":
+        await q.answer()
+        await leaderboard.user_leaderboard(update, context) 
+        return
 
-    # 3. Stickers
-    elif data == "admin_pack_add":
-        ADMIN_INPUT_STATE[user_id] = 'add_pack'
-        await q.edit_message_text(f"<blockquote>👻 <b>Send Sticker Pack Name or Link:</b></blockquote>", parse_mode=ParseMode.HTML)
-    elif data == "admin_pack_del":
-        ADMIN_INPUT_STATE[user_id] = 'del_pack'
-        packs = "\n".join([f"<code>{p}</code>" for p in get_sticker_packs()])
-        msg = f"<blockquote>➖ <b>Send Pack Name to delete:</b></blockquote>\n\n{packs}"
-        await q.edit_message_text(msg, parse_mode=ParseMode.HTML)
+    if data.startswith(("start_", "st_")):
+        await start.start_callback(update, context)
+        return
 
-    # 4. Others
-    elif data == "admin_cast_ask":
-        ADMIN_INPUT_STATE[user_id] = 'broadcast'
-        await q.edit_message_text(f"<blockquote>📢 <b>Send anything to Broadcast (Text/Photo/Video):</b></blockquote>", parse_mode=ParseMode.HTML)
-    elif data == "admin_add_ask":
-        ADMIN_INPUT_STATE[user_id] = 'add_money'
-        await q.edit_message_text(f"<blockquote>💰 <b>Format:</b> <code>UserID Amount</code>\n(Ex: <code>12345 5000</code>)</blockquote>", parse_mode=ParseMode.HTML)
-    elif data == "admin_take_ask":
-        ADMIN_INPUT_STATE[user_id] = 'take_money'
-        await q.edit_message_text(f"<blockquote>💸 <b>Format:</b> <code>UserID Amount</code>\n(Ex: <code>12345 5000</code>)</blockquote>", parse_mode=ParseMode.HTML)
-    elif data == "admin_set_logger":
-        ADMIN_INPUT_STATE[user_id] = "waiting_logger_id"
-        await q.edit_message_text(f"<blockquote>📝 <b>Send Logger Group ID:</b></blockquote>", parse_mode=ParseMode.HTML)
-    elif data == "admin_code_ask":
-        ADMIN_INPUT_STATE[user_id] = 'create_code'
-        await q.edit_message_text(f"<blockquote>🎁 <b>Format:</b> <code>Name Amount Limit</code>\n(Ex: <code>MIMI100 500 10</code>)</blockquote>", parse_mode=ParseMode.HTML)
+    if data.startswith("admin_"):
+        await admin.admin_callback(update, context)
+        return
 
-    # --- ACTIONS ---
-    elif data == "admin_toggle_eco":
-        set_economy_status(not get_economy_status())
-        await admin_panel(update, context)
-    elif data == "admin_del_logger":
-        delete_logger_group()
-        await q.answer("🗑 Logger Deleted!")
-        await admin_panel(update, context)
-    elif data == "admin_wipe_ask":
-        kb = [[InlineKeyboardButton("⚠️ CONFIRM WIPE", callback_data="admin_wipe_confirm")], [InlineKeyboardButton("🔙 Back", callback_data="admin_back")]]
-        msg = f"<blockquote>☢️ <b>DATABASE WIPE?</b></blockquote>\n<blockquote>This cannot be undone! Are you sure?</blockquote>"
-        await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
-    elif data == "admin_wipe_confirm":
-        wipe_database()
-        await q.edit_message_text("<blockquote>💀 <b>DATABASE WIPED!</b></blockquote>", parse_mode=ParseMode.HTML)
-    elif data == "admin_back":
-        await admin_panel(update, context)
-    elif data == "admin_close":
-        await q.message.delete()
-        if user_id in ADMIN_INPUT_STATE: del ADMIN_INPUT_STATE[user_id]
+    if data.startswith(("wrank_", "new_wordseek_", "close_wrank", "end_wordseek")):
+        await wordseek.wordseek_callback(update, context)
+        return
 
-# --- 3. INPUT HANDLER ---
-async def handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    if data.startswith(("rank_", "hide_rank")):
+        await chatstat.rank_callback(update, context)
+        return
+        
+    if data.startswith(("set_", "clk_", "cash_", "close_", "noop_", "rebet_")):
+        await bet.bet_callback(update, context)
+        return
+
+    if data.startswith("ttt_"):
+        await tictactoe.ttt_callback(update, context)
+        return
+
+    if data.startswith("reg_start_"):
+        if uid != int(data.split("_")[2]): return await q.answer("Not for you!", show_alert=True)
+        if register_user(uid, q.from_user.first_name): await q.edit_message_text("✅ Registered!")
+        else: await q.answer("Already registered!")
+        return
+
+    if data.startswith("buy_"):
+        parts = data.split("_")
+        if uid != int(parts[2]): return await q.answer("Not for you!", show_alert=True)
+        item = SHOP_ITEMS.get(parts[1])
+        if get_balance(uid) < item["price"]: return await q.answer("No Money!", show_alert=True)
+        update_balance(uid, -item["price"])
+        users_col.update_one({"_id": uid}, {"$push": {"titles": item["name"]}})
+        await q.answer(f"Bought {item['name']}!")
+        return
     
-    # CHANGE: Ab ye list (OWNER_IDS) me check karega
-    if user_id not in OWNER_IDS: return False
+    if data.startswith("revive_"):
+        await pay.revive_callback(update, context)
+        return
+        
+    if data == "giveup_wordgrid":
+        await wordgrid.give_up(update, context)
+        return
+        
+    if data.startswith("grid_"):
+        await wordgrid.grid_callback(update, context)
+        return
+
+    if data == "close_time":
+        await livetime.close_time(update, context)
+        return
+
+# --- MESSAGE HANDLER (UPDATED FOR COMPLETE SILENCE) ---
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message: return
+    user = update.effective_user
+    chat = update.effective_chat
     
-    state = ADMIN_INPUT_STATE.get(user_id)
-    if not state: return False
+    # 0. DM SPAM PROTECTION
+    if chat.type == "private":
+        spam_status = dmspam.check_spam(user.id)
+        if spam_status == "BLOCKED": return 
+        elif spam_status == "NEW_BLOCK":
+            await update.message.reply_text("🚫 **Spam mat kar bhai!**\n5 minute ke liye block kiya ja raha hai.")
+            return 
 
-    msg = update.message
-    text = msg.text.strip() if msg.text else None
-
-    # 🔥 1. BROADCAST LOGIC (ANY MEDIA) 🔥
-    if state == 'broadcast':
-        users = list(users_col.find({}))
-        groups = list(groups_col.find({}))
-        count = 0
-        status_msg = await msg.reply_text("📢 Sending...")
-        for chat in users + groups:
-            try: 
-                await context.bot.copy_message(chat_id=chat["_id"], from_chat_id=msg.chat_id, message_id=msg.message_id)
-                count += 1
+    # 1. ENFORCEMENT
+    if chat.type in ["group", "supergroup"] and not user.is_bot:
+        if is_user_banned(chat.id, user.id) or is_user_muted(chat.id, user.id):
+            try: await update.message.delete()
             except: pass
-        await status_msg.edit_text(f"✅ Sent to {count} chats!")
-        del ADMIN_INPUT_STATE[user_id]
-        return True
+            return
 
-    if not text: return False
+    # 2. GLOBAL ANTI-SPAM
+    if not user.is_bot:
+        status = check_spam(user.id)
+        if status == "BLOCKED":
+            await update.message.reply_text(f"🚫 **Spam Detected!**\n{user.first_name}, blocked for 8 mins.")
+            return
+        elif status == False: return  # ✅ YEH LINE IMPORTANT HAI
 
-    # 🔥 2. CHAT KEYS 🔥
-    if state == 'add_key':
-        if add_api_key(text): await msg.reply_text("✅ Chat Key Added!")
-        else: await msg.reply_text("⚠️ Exists!")
+    # 3. STATS
+    update_username(user.id, user.first_name)
+    if chat.type in ["group", "supergroup"] and not user.is_bot:
+        update_chat_stats(chat.id, user.id, user.first_name)
+        update_group_activity(chat.id, chat.title)
+
+    # 4. ADMIN & GAMES
+    if await admin.handle_admin_input(update, context): return
+    await wordseek.handle_word_guess(update, context)
+    await wordgrid.handle_word_guess(update, context)
+
+    # 5. STICKER REPLY
+    if update.message.sticker:
+        if chat.type == "private" or (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id) or random.random() < 0.2:
+            sticker_id = await get_mimi_sticker(context.bot)
+            if sticker_id: await update.message.reply_sticker(sticker_id)
+        return
+
+    # 6. TEXT & VOICE AI
+    text = update.message.text
+    if not text: return
+
+    should_reply = False
+    if chat.type == "private": should_reply = True
+    elif any(trigger in text.lower() for trigger in ["aniya", context.bot.username.lower()]): should_reply = True
+    elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id: should_reply = True
+
+    if should_reply:
+        voice_triggers = ["voice", "note", "moh", "audio", "gn", "gm", "rec","kaho"]
+        wants_voice = any(v in text.lower() for v in voice_triggers)
+
+        await context.bot.send_chat_action(chat_id=chat.id, action="typing")
+        
+        # 🔥 AI Response - OLD LOGIC USE KARO
+        ai_reply = get_yuki_response(user.id, text, user.first_name)  # ✅ Purana function call
+
+        if wants_voice:
+            await context.bot.send_chat_action(chat_id=chat.id, action="record_voice")
+            audio_path = await generate_voice(ai_reply)
+            
+            if audio_path:
+                try:
+                    with open(audio_path, 'rb') as voice_file:
+                        await update.message.reply_voice(voice=voice_file)
+                    os.remove(audio_path)
+                    return
+                except: await update.message.reply_text(ai_reply)
+            else: await update.message.reply_text(ai_reply)
+        else:
+            await update.message.reply_text(ai_reply)
+
+# --- MAIN ENGINE ---
+def main():
+    keep_alive()
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
     
-    elif state == 'del_key':
-        if remove_api_key(text): await msg.reply_text("🗑 Chat Key Deleted!")
-        else: await msg.reply_text("❌ Not Found.")
+    # Handlers
+    app.add_handler(CommandHandler("start", start.start))
+    app.add_handler(CommandHandler("admin", admin.admin_panel))
+    app.add_handler(CommandHandler("info", info.user_info))
+    app.add_handler(CommandHandler("love", info.love_calculator))
+    app.add_handler(CommandHandler("stupid", info.stupid_meter))
+    app.add_handler(CommandHandler("couple", couple.couple_check))
+    app.add_handler(CommandHandler("bal", check_balance))
+    app.add_handler(CommandHandler("redeem", redeem_code))
+    app.add_handler(CommandHandler("shop", shop_menu))
+    app.add_handler(CommandHandler("top", leaderboard.user_leaderboard))
+    app.add_handler(CommandHandler("ranking", group.ranking))
+    app.add_handler(CommandHandler("stats", logger.stats_bot))
+    app.add_handler(CommandHandler("ping", logger.ping_bot))
+    app.add_handler(CommandHandler("bet", bet.bet_menu))
+    app.add_handler(CommandHandler("new", wordseek.start_wordseek))
+    app.add_handler(CommandHandler("wordgrid", wordgrid.start_wordgrid))
+    app.add_handler(CommandHandler("zero", tictactoe.start_ttt))
+    app.add_handler(CommandHandler("market", group.market_info))
+    app.add_handler(CommandHandler("invest", group.invest))
+    app.add_handler(CommandHandler("sell", group.sell_shares))
+    app.add_handler(CommandHandler("topinvest", group.top_investors))
+    app.add_handler(CommandHandler("bank", bank.bank_info))
+    app.add_handler(CommandHandler("deposit", bank.deposit))
+    app.add_handler(CommandHandler("withdraw", bank.withdraw))
+    app.add_handler(CommandHandler("loan", bank.take_loan))
+    app.add_handler(CommandHandler("payloan", bank.repay_loan))
+    app.add_handler(CommandHandler("pay", pay.pay_user))
+    app.add_handler(CommandHandler("rob", pay.rob_user))
+    app.add_handler(CommandHandler("kill", pay.kill_user))
+    app.add_handler(CommandHandler("revive", pay.revive_command))
+    app.add_handler(CommandHandler("protect", pay.protect_user))
+    app.add_handler(CommandHandler("alive", pay.check_status))
+    app.add_handler(CommandHandler("time", livetime.start_live_time))
+    app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
 
-    # 🔥 3. GAME KEYS 🔥
-    elif state == 'add_game_key':
-        if add_game_key(text): await msg.reply_text("✅ Game Key Added!")
-        else: await msg.reply_text("⚠️ Exists!")
+    # 🚫 GCHAT COMMAND REMOVED (Aapke liye)
+    # 🚫 GSTICKER COMMAND REMOVED (Aapke liye)
 
-    elif state == 'del_game_key':
-        if remove_game_key(text): await msg.reply_text("🗑 Game Key Deleted!")
-        else: await msg.reply_text("❌ Not Found.")
-
-    # 🔥 4. STICKER PACKS 🔥
-    elif state == 'add_pack':
-        pname = text.split('/')[-1]
-        try:
-            await context.bot.get_sticker_set(pname)
-            if add_sticker_pack(pname): await msg.reply_text(f"✅ Pack Added: `{pname}`")
-            else: await msg.reply_text("⚠️ Already Exists!")
-        except: await msg.reply_text("❌ Invalid Pack!")
+    app.add_handler(CallbackQueryHandler(callback_handler))
     
-    elif state == 'del_pack':
-        if remove_sticker_pack(text): await msg.reply_text("🗑 Pack Deleted!")
-        else: await msg.reply_text("❌ Not Found.")
-
-    # 🔥 5. MONEY & OTHERS 🔥
-    elif state in ['add_money', 'take_money']:
-        try:
-            parts = text.split()
-            tid, amt = int(parts[0]), int(parts[1])
-            if state == 'take_money': amt = -amt
-            update_balance(tid, amt)
-            await msg.reply_text("✅ Balance Updated!")
-        except: await msg.reply_text("❌ Error! Format: `ID Amount` ")
-
-    elif state == 'create_code':
-        try:
-            parts = text.split()
-            codes_col.insert_one({"code": parts[0], "amount": int(parts[1]), "limit": int(parts[2]), "redeemed_by": []})
-            await msg.reply_text(f"🎁 Code Created: `{parts[0]}`")
-        except: await msg.reply_text("❌ Error!")
-
-    elif state == 'waiting_logger_id':
-        try:
-            set_logger_group(int(text))
-            await msg.reply_text(f"✅ Logger Set: `{text}`")
-        except: await msg.reply_text("❌ Invalid ID")
-
-    del ADMIN_INPUT_STATE[user_id]
-    return True
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, events.welcome_user))
+    app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, events.track_leave))
+    app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_STARTED, events.vc_handler))
+    app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_ENDED, events.vc_handler))
+    app.add_handler(MessageHandler(filters.StatusUpdate.VIDEO_CHAT_PARTICIPANTS_INVITED, events.vc_handler))
     
+    app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
+    
+    # 🔥 Plugins LOAD (Music vagera)
+    load_plugins(app)
+
+    # Note: 'handle_message' catches ALL text, so it must be last
+    app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
+    
+    print(f"🚀 {BOT_NAME} STARTED SUCCESSFULLY!")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
