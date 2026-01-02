@@ -20,6 +20,10 @@ from database import (
 from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
+# main.py ke imports section mein add karo
+from telegram.ext import TypeHandler 
+from maintenance import maintenance_gatekeeper, maintenance_command, sync_maintenance
+
 # ✅ Music Assistant Import
 from tools.stream import start_music_worker
 import tools.stream 
@@ -64,7 +68,7 @@ def load_plugins(application: Application):
 
     for file in path_list:
         module_name = file[:-3]
-        if module_name == "broadcast": 
+        if module_name == "broadcast": 7
             continue
             
         try:
@@ -76,9 +80,14 @@ def load_plugins(application: Application):
             print(f"  ❌ FAILED to load {module_name}!")
             print(f"     Error: {e}")
 
+
 # --- STARTUP MESSAGE ---
 async def on_startup(application: Application):
     print(f"🚀 {BOT_NAME} IS STARTING...")
+    
+    # 🔥 Brackets () lagana zaroori hai
+    await sync_maintenance() 
+    
     print("🔵 Starting Music Assistant...")
     try: await start_music_worker()
     except Exception as e: print(f"❌ Assistant Start Failed: {e}")
@@ -91,7 +100,7 @@ async def on_startup(application: Application):
             await application.bot.send_message(chat_id=logger_id, text=txt, parse_mode=ParseMode.HTML)
         except Exception as e: 
             print(f"⚠️ Logger Error: {e}")
-
+            
 # --- ⚙️ NEW COMMANDS: GCHAT & GSTICKER ---
 
 async def toggle_gchat(update: Update, context: ContextTypes.DEFAULT_TYPE):
