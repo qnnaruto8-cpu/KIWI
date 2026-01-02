@@ -5,7 +5,7 @@ from threading import Thread
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, TypeHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 # IMPORTS
 from config import TELEGRAM_TOKEN, BOT_NAME 
@@ -14,22 +14,14 @@ from database import (
     check_registered, register_user, update_group_activity, 
     update_username, update_chat_stats,
     is_user_muted, is_user_banned,
-    get_logger_group,
-    set_group_setting, get_group_settings 
+    get_logger_group
 )
 from ai_chat import get_yuki_response, get_mimi_sticker
 from tts import generate_voice 
 
-# ✅ Maintenance Import
-from maintenance import maintenance_gatekeeper, maintenance_command, sync_maintenance
-
 # ✅ Music Assistant Import
 from tools.stream import start_music_worker
 import tools.stream 
-
-# ✅ Broadcast Import & Database Functions
-from tools.broadcast import register_broadcast_handlers
-from tools.database import add_served_user, add_served_chat
 
 # MODULES 
 import admin, start, group, leaderboard, pay, bet, wordseek, chatstat, logger, events, info, tictactoe, couple
@@ -67,9 +59,6 @@ def load_plugins(application: Application):
 
     for file in path_list:
         module_name = file[:-3]
-        if module_name == "broadcast": 
-            continue
-            
         try:
             module = importlib.import_module(f"{plugin_dir}.{module_name}")
             if hasattr(module, "register_handlers"):
@@ -79,14 +68,9 @@ def load_plugins(application: Application):
             print(f"  ❌ FAILED to load {module_name}!")
             print(f"     Error: {e}")
 
-
 # --- STARTUP MESSAGE ---
 async def on_startup(application: Application):
     print(f"🚀 {BOT_NAME} IS STARTING...")
-    
-    # ✅ Sync Maintenance State
-    await sync_maintenance() 
-    
     print("🔵 Starting Music Assistant...")
     try: await start_music_worker()
     except Exception as e: print(f"❌ Assistant Start Failed: {e}")
@@ -99,42 +83,6 @@ async def on_startup(application: Application):
             await application.bot.send_message(chat_id=logger_id, text=txt, parse_mode=ParseMode.HTML)
         except Exception as e: 
             print(f"⚠️ Logger Error: {e}")
-            
-# --- ⚙️ GSTICKER COMMAND (Gchat Removed) ---
-
-async def toggle_gsticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat = update.effective_chat
-    user = update.effective_user
-
-    if chat.type in ["group", "supergroup"]:
-        member = await chat.get_member(user.id)
-        if member.status not in ["administrator", "creator"]:
-            return await update.message.reply_text("❌ ᴏɴʟʏ ᴀᴅᴍɪɴꜱ ᴄᴀɴ ᴄʜᴀɴɢᴇ ᴛʜɪꜱ ꜱᴇᴛᴛɪɴɢ!")
-
-    if not context.args:
-        return await update.message.reply_text("⚠️ ᴜꜱᴀɢᴇ: `/ɢꜱᴛɪᴄᴋᴇʀ ᴏɴ` ᴏʀ `/ɢꜱᴛɪᴄᴋᴇʀ ᴏꜰꜰ`")
-
-    state = context.args[0].lower()
-
-    # Safe check for current setting
-    current_settings = get_group_settings(chat.id)
-    is_currently_on = current_settings.get("sticker_mode", True)
-
-    if state == "on":
-        if is_currently_on:
-            return await update.message.reply_text("⚠️ **Sticker Mode is already ON!**")
-        
-        set_group_setting(chat.id, "sticker_mode", True)
-        await update.message.reply_text(f"✅ **ꜱᴛɪᴄᴋᴇʀ ᴍᴏᴅᴇ ᴇɴᴀʙʟᴇᴅ!**\nɪ ᴡɪʟʟ ʀᴇᴘʟʏ ᴡɪᴛʜ ꜱᴛɪᴄᴋᴇʀꜱ.")
-        
-    elif state == "off":
-        if not is_currently_on:
-            return await update.message.reply_text("⚠️ **Sticker Mode is already OFF!**")
-            
-        set_group_setting(chat.id, "sticker_mode", False)
-        await update.message.reply_text(f"🚫 **ꜱᴛɪᴄᴋᴇʀ ᴍᴏᴅᴇ ᴅɪꜱᴀʙʟᴇᴅ!**\nɴᴏ ᴍᴏʀᴇ ꜱᴛɪᴄᴋᴇʀꜱ ɪɴ ʀᴇᴘʟʏ.")
-    else:
-        await update.message.reply_text("⚠️ ᴜꜱᴀɢᴇ: `/ɢꜱᴛɪᴄᴋᴇʀ ᴏɴ` ᴏʀ `/ɢꜱᴛɪᴄᴋᴇʀ ᴏꜰꜰ`")
 
 # --- SHOP MENU ---
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -284,18 +232,12 @@ async def callback_handler(update, context):
         await livetime.close_time(update, context)
         return
 
-# --- MESSAGE HANDLER (UPDATED: NO GCHAT LOGIC) ---
+# --- MESSAGE HANDLER (UPDATED FOR COMPLETE SILENCE) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     user = update.effective_user
     chat = update.effective_chat
     
-    # 🔥 DATA SAVE FOR BROADCAST
-    if chat.type == "private":
-        await add_served_user(user.id)
-    else:
-        await add_served_chat(chat.id)
-
     # 0. DM SPAM PROTECTION
     if chat.type == "private":
         spam_status = dmspam.check_spam(user.id)
@@ -317,6 +259,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if status == "BLOCKED":
             await update.message.reply_text(f"🚫 **Spam Detected!**\n{user.first_name}, blocked for 8 mins.")
             return
+        elif status == False: return  # ✅ YEH LINE IMPORTANT HAI
 
     # 3. STATS
     update_username(user.id, user.first_name)
@@ -329,15 +272,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await wordseek.handle_word_guess(update, context)
     await wordgrid.handle_word_guess(update, context)
 
-    # 🛑 SETTINGS CHECK (Only checking Sticker Mode now)
-    settings = get_group_settings(chat.id)
-    sticker_enabled = settings.get("sticker_mode", True)
-
     # 5. STICKER REPLY
     if update.message.sticker:
-        if not sticker_enabled:
-            return
-
         if chat.type == "private" or (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id) or random.random() < 0.2:
             sticker_id = await get_mimi_sticker(context.bot)
             if sticker_id: await update.message.reply_sticker(sticker_id)
@@ -347,18 +283,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if not text: return
 
-    # 🔥 SIMPLE REPLY LOGIC (Removed Gchat Check)
     should_reply = False
-    
-    # Triggers for reply
-    is_private = chat.type == "private"
-    is_reply_to_bot = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
-    my_username = context.bot.username.lower() if context.bot.username else "aniya"
-    has_keyword = any(trigger in text.lower() for trigger in ["aniya", my_username])
-
-    # Logic: Private OR Reply OR Keyword
-    if is_private or is_reply_to_bot or has_keyword:
-        should_reply = True
+    if chat.type == "private": should_reply = True
+    elif any(trigger in text.lower() for trigger in ["aniya", context.bot.username.lower()]): should_reply = True
+    elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id: should_reply = True
 
     if should_reply:
         voice_triggers = ["voice", "note", "moh", "audio", "gn", "gm", "rec","kaho"]
@@ -366,7 +294,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_chat_action(chat_id=chat.id, action="typing")
         
-        ai_reply = await get_yuki_response(user.id, text, user.first_name, update.message)
+        # 🔥 AI Response - OLD LOGIC USE KARO
+        ai_reply = get_yuki_response(user.id, text, user.first_name)  # ✅ Purana function call
 
         if wants_voice:
             await context.bot.send_chat_action(chat_id=chat.id, action="record_voice")
@@ -388,10 +317,6 @@ def main():
     keep_alive()
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
     
-    # Maintenance
-    app.add_handler(TypeHandler(Update, maintenance_gatekeeper), group=-1)
-    app.add_handler(CommandHandler("maintenance", maintenance_command))
-
     # Handlers
     app.add_handler(CommandHandler("start", start.start))
     app.add_handler(CommandHandler("admin", admin.admin_panel))
@@ -428,8 +353,8 @@ def main():
     app.add_handler(CommandHandler("time", livetime.start_live_time))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
 
-    # ✅ REGISTER NEW COMMANDS (ONLY GSTICKER)
-    app.add_handler(CommandHandler(["gsticker", "Gsticker"], toggle_gsticker))
+    # 🚫 GCHAT COMMAND REMOVED (Aapke liye)
+    # 🚫 GSTICKER COMMAND REMOVED (Aapke liye)
 
     app.add_handler(CallbackQueryHandler(callback_handler))
     
@@ -441,11 +366,8 @@ def main():
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
-    # 🔥 Plugins LOAD
+    # 🔥 Plugins LOAD (Music vagera)
     load_plugins(app)
-
-    # 🔥 REGISTER BROADCAST HANDLER
-    register_broadcast_handlers(app)
 
     # Note: 'handle_message' catches ALL text, so it must be last
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
@@ -455,4 +377,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
