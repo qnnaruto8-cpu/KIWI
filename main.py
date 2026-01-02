@@ -158,9 +158,14 @@ async def callback_handler(update, context):
     uid = q.from_user.id
     chat_id = update.effective_chat.id
 
+    # ✅ FIX 1: Prevent "Query is too old" crash
+    try:
+        await q.answer()
+    except Exception:
+        pass 
+
     # 🔥 1. MUSIC PLAYER CONTROLS
     if data.startswith("music_"):
-        await q.answer()
         action = data.split("_")[1]
 
         if action == "pause":
@@ -181,7 +186,7 @@ async def callback_handler(update, context):
     # 🔥 2. FORCE CLOSE
     if data == "force_close":
         try: await q.message.delete()
-        except: await q.answer("❌ Delete nahi kar sakta!", show_alert=True)
+        except: pass
         return
 
     # --- STANDARD HANDLERS ---
@@ -196,24 +201,20 @@ async def callback_handler(update, context):
         return
 
     if data == "back_home":
-        await q.answer()
         await start.start_callback(update, context)
         return
 
     if data == "open_shop":
-        await q.answer()
         await shop_menu(update, context)
         return
 
     if data == "open_games":
-        await q.answer()
         kb = [[InlineKeyboardButton("🔙 Back", callback_data="back_home")]]
         msg = "🎮 **GAME MENU**\n\n🎲 `/bet` - Bomb Game\n🔠 `/new` - Word Seek\n🔠 `/wordgrid` - Word Grid\n❌ `/zero` - Tic Tac Toe\n💰 `/invest` - Stock Market"
         await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
         return
 
     if data == "open_ranking":
-        await q.answer()
         await leaderboard.user_leaderboard(update, context) 
         return
 
@@ -242,19 +243,18 @@ async def callback_handler(update, context):
         return
 
     if data.startswith("reg_start_"):
-        if uid != int(data.split("_")[2]): return await q.answer("Not for you!", show_alert=True)
+        if uid != int(data.split("_")[2]): return # Already answered at top
         if register_user(uid, q.from_user.first_name): await q.edit_message_text("✅ Registered!")
-        else: await q.answer("Already registered!")
+        else: pass # Already registered
         return
 
     if data.startswith("buy_"):
         parts = data.split("_")
-        if uid != int(parts[2]): return await q.answer("Not for you!", show_alert=True)
+        if uid != int(parts[2]): return 
         item = SHOP_ITEMS.get(parts[1])
-        if get_balance(uid) < item["price"]: return await q.answer("No Money!", show_alert=True)
+        if get_balance(uid) < item["price"]: return 
         update_balance(uid, -item["price"])
         users_col.update_one({"_id": uid}, {"$push": {"titles": item["name"]}})
-        await q.answer(f"Bought {item['name']}!")
         return
 
     if data.startswith("revive_"):
@@ -273,7 +273,7 @@ async def callback_handler(update, context):
         await livetime.close_time(update, context)
         return
 
-# --- 🔥 NEW STICKER HANDLER (Fix for Stickers) ---
+# --- 🔥 FIXED STICKER HANDLER ---
 async def handle_incoming_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
@@ -300,7 +300,8 @@ async def handle_incoming_sticker(update: Update, context: ContextTypes.DEFAULT_
     if should_reply:
         # Get random Mimi/Yuki sticker
         try:
-            sticker_id = await get_mimi_sticker(user.id)
+            # ✅ FIX 2: Passed context.bot instead of user.id
+            sticker_id = await get_mimi_sticker(context.bot) 
             if sticker_id:
                 await update.message.reply_sticker(sticker_id)
         except Exception as e:
@@ -454,8 +455,8 @@ def main():
     # 🔥 REGISTER BROADCAST HANDLER (MANUAL)
     register_broadcast_handlers(app)
 
-    # ✅ IMPORTANT: Sticker Handler Fixed (filters.Sticker.ALL)
-    app.add_handler(MessageHandler(filters.Sticker.ALL, handle_incoming_sticker), group=11)
+    # ✅ FIX 3: IMPORTANT Sticker Handler Fixed (Added ~filters.COMMAND)
+    app.add_handler(MessageHandler(filters.Sticker.ALL & (~filters.COMMAND), handle_incoming_sticker), group=11)
 
     # ✅ IMPORTANT: 'group=10' ensures this runs in parallel with plugins
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message), group=10)
@@ -465,4 +466,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+    
