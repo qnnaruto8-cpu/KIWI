@@ -12,7 +12,7 @@ from config import OWNER_ID, OWNER_NAME, GROUP_LINK, INSTAGRAM_LINK, UPDATE_CHAN
 from ai_chat import get_mimi_sticker
 
 # --- GLOBAL VARS ---
-START_IMG = "https://i.ibb.co/8gW9bqTd/IMG-20251224-191812-875.jpg" 
+START_IMG = "https://i.ibb.co/SDPc2634/IMG-20260102-111351-894.jpg" 
 BOT_START_TIME = time.time()
 
 # --- HELPER: GET UPTIME ---
@@ -65,13 +65,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Loading Bars
     bars = [
-        "⚡ 𝚲𝛈𝛊𝛄𝛂 ɪs ʟᴏᴀᴅɪɴɢ....🌷🍡",
-        "💕 𝚲𝛈𝛊𝛄𝛂 ɪs ʟᴏᴀᴅɪɴɢ..🌷 ",
-        "👀 𝚲𝛈𝛊𝛄𝛂 ɪs ʟᴏᴀᴅɪɴɢ...🍡",
-        "🍷 𝚲𝛈𝛊𝛄𝛂 ɪs ʟᴏᴀᴅɪɴɢ.... ",
-        "🍫 𝚲𝛈𝛊𝛄𝛂 ɪs ʟᴏᴀᴅɪɴɢ. ",
-        "🫀 𝚲𝛈𝛊𝛄𝛂 ɪs ʟᴏᴀᴅɪɴɢ.. ",
-        "🥂 𝚲𝛈𝛊𝛄𝛂 ɪs ʟᴏᴀᴅɪɴɢ...🌷🍡!"
+        "⚡ 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ....🌷🍡",
+        "💕 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ..🌷 ",
+        "👀 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ...🍡",
+        "🍷 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ.... ",
+        "🍫 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ. ",
+        "🫀 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ.. ",
+        "🥂 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ...🌷🍡!"
     ]
     for bar in bars:
         try:
@@ -186,7 +186,7 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 2. SUB MENUS
     elif data in ["help_bank", "help_market", "help_games", "help_shop", "help_admin", "help_next"]:
-        text = "ℹ️ **Category Help**\nClick Back to go to menu."
+        text = "ℹ️ **Category Help /help **\nClick Back to go to menu."
         kb = [[InlineKeyboardButton("🔙 Back", callback_data="help_main")]]
         await q.edit_message_caption(caption=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
