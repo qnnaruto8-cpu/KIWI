@@ -68,7 +68,7 @@ def load_plugins(application: Application):
 
     for file in path_list:
         module_name = file[:-3]
-        if module_name == "broadcast": 7
+        if module_name == "broadcast": 
             continue
             
         try:
