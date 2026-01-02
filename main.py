@@ -436,7 +436,6 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
 
     # ✅ REGISTER NEW COMMANDS (GChat Removed)
-    # app.add_handler(CommandHandler(["gchat", "Gchat"], toggle_gchat))  <-- REMOVED
     app.add_handler(CommandHandler(["gsticker", "Gsticker"], toggle_gsticker))
 
     app.add_handler(CallbackQueryHandler(callback_handler))
@@ -455,8 +454,8 @@ def main():
     # 🔥 REGISTER BROADCAST HANDLER (MANUAL)
     register_broadcast_handlers(app)
 
-    # ✅ IMPORTANT: Sticker Handler Added
-    app.add_handler(MessageHandler(filters.STICKER, handle_incoming_sticker), group=11)
+    # ✅ IMPORTANT: Sticker Handler Fixed (filters.Sticker.ALL)
+    app.add_handler(MessageHandler(filters.Sticker.ALL, handle_incoming_sticker), group=11)
 
     # ✅ IMPORTANT: 'group=10' ensures this runs in parallel with plugins
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message), group=10)
@@ -466,4 +465,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+        
