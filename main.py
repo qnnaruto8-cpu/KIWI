@@ -100,29 +100,7 @@ async def on_startup(application: Application):
         except Exception as e: 
             print(f"⚠️ Logger Error: {e}")
             
-# --- ⚙️ NEW COMMANDS: GCHAT & GSTICKER ---
-
-async def toggle_gchat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat = update.effective_chat
-    user = update.effective_user
-    
-    if chat.type in ["group", "supergroup"]:
-        member = await chat.get_member(user.id)
-        if member.status not in ["administrator", "creator"]:
-            return await update.message.reply_text("❌ ᴏɴʟʏ ᴀᴅᴍɪɴꜱ ᴄᴀɴ ᴄʜᴀɴɢᴇ ᴛʜɪꜱ ꜱᴇᴛᴛɪɴɢ!")
-
-    if not context.args:
-        return await update.message.reply_text("⚠️ ᴜꜱᴀɢᴇ: `/ɢᴄʜᴀᴛ ᴏɴ` ᴏʀ `/ɢᴄʜᴀᴛ ᴏꜰꜰ`")
-
-    state = context.args[0].lower()
-    if state == "on":
-        set_group_setting(chat.id, "chat_mode", True)
-        await update.message.reply_text(f"✅ **ᴄʜᴀᴛ ᴍᴏᴅᴇ ᴇɴᴀʙʟᴇᴅ!**\nɪ ᴡɪʟʟ ᴛᴀʟᴋ ɪɴ ᴛʜɪꜱ ɢʀᴏᴜᴘ ɴᴏᴡ.")
-    elif state == "off":
-        set_group_setting(chat.id, "chat_mode", False)
-        await update.message.reply_text(f"🔇 **ᴄʜᴀᴛ ᴍᴏᴅᴇ ᴅɪꜱᴀʙʟᴇᴅ!**\nɪ ᴡɪʟʟ ʙᴇ ǫᴜɪᴇᴛ ɴᴏᴡ.")
-    else:
-        await update.message.reply_text("⚠️ ᴜꜱᴀɢᴇ: `/ɢᴄʜᴀᴛ ᴏɴ` ᴏʀ `/ɢᴄʜᴀᴛ ᴏꜰꜰ`")
+# --- ⚙️ GSTICKER COMMAND (Gchat Removed) ---
 
 async def toggle_gsticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -137,10 +115,22 @@ async def toggle_gsticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("⚠️ ᴜꜱᴀɢᴇ: `/ɢꜱᴛɪᴄᴋᴇʀ ᴏɴ` ᴏʀ `/ɢꜱᴛɪᴄᴋᴇʀ ᴏꜰꜰ`")
 
     state = context.args[0].lower()
+
+    # Safe check for current setting
+    current_settings = get_group_settings(chat.id)
+    is_currently_on = current_settings.get("sticker_mode", True)
+
     if state == "on":
+        if is_currently_on:
+            return await update.message.reply_text("⚠️ **Sticker Mode is already ON!**")
+        
         set_group_setting(chat.id, "sticker_mode", True)
         await update.message.reply_text(f"✅ **ꜱᴛɪᴄᴋᴇʀ ᴍᴏᴅᴇ ᴇɴᴀʙʟᴇᴅ!**\nɪ ᴡɪʟʟ ʀᴇᴘʟʏ ᴡɪᴛʜ ꜱᴛɪᴄᴋᴇʀꜱ.")
+        
     elif state == "off":
+        if not is_currently_on:
+            return await update.message.reply_text("⚠️ **Sticker Mode is already OFF!**")
+            
         set_group_setting(chat.id, "sticker_mode", False)
         await update.message.reply_text(f"🚫 **ꜱᴛɪᴄᴋᴇʀ ᴍᴏᴅᴇ ᴅɪꜱᴀʙʟᴇᴅ!**\nɴᴏ ᴍᴏʀᴇ ꜱᴛɪᴄᴋᴇʀꜱ ɪɴ ʀᴇᴘʟʏ.")
     else:
@@ -294,7 +284,7 @@ async def callback_handler(update, context):
         await livetime.close_time(update, context)
         return
 
-# --- MESSAGE HANDLER (UPDATED FOR BROADCAST SAVING) ---
+# --- MESSAGE HANDLER (UPDATED: NO GCHAT LOGIC) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     user = update.effective_user
@@ -339,10 +329,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await wordseek.handle_word_guess(update, context)
     await wordgrid.handle_word_guess(update, context)
 
-    # 🛑 SETTINGS CHECK
+    # 🛑 SETTINGS CHECK (Only checking Sticker Mode now)
     settings = get_group_settings(chat.id)
-    chat_enabled = settings["chat_mode"]
-    sticker_enabled = settings["sticker_mode"]
+    sticker_enabled = settings.get("sticker_mode", True)
 
     # 5. STICKER REPLY
     if update.message.sticker:
@@ -358,14 +347,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if not text: return
 
-    # 🔥 COMPLETE SILENCE LOGIC
-    if chat.type != "private" and not chat_enabled:
-        return 
-
+    # 🔥 SIMPLE REPLY LOGIC (Removed Gchat Check)
     should_reply = False
-    if chat.type == "private": should_reply = True
-    elif any(trigger in text.lower() for trigger in ["aniya", context.bot.username.lower()]): should_reply = True
-    elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id: should_reply = True
+    
+    # Triggers for reply
+    is_private = chat.type == "private"
+    is_reply_to_bot = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
+    my_username = context.bot.username.lower() if context.bot.username else "aniya"
+    has_keyword = any(trigger in text.lower() for trigger in ["aniya", my_username])
+
+    # Logic: Private OR Reply OR Keyword
+    if is_private or is_reply_to_bot or has_keyword:
+        should_reply = True
 
     if should_reply:
         voice_triggers = ["voice", "note", "moh", "audio", "gn", "gm", "rec","kaho"]
@@ -395,8 +388,7 @@ def main():
     keep_alive()
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
     
-    # 🔥🔥🔥 MAINTENANCE HANDLERS ADDED HERE (YE MISSING THE) 🔥🔥🔥
-    # TypeHandler sabse pehle chalega taaki block kar sake (group=-1)
+    # Maintenance
     app.add_handler(TypeHandler(Update, maintenance_gatekeeper), group=-1)
     app.add_handler(CommandHandler("maintenance", maintenance_command))
 
@@ -436,8 +428,7 @@ def main():
     app.add_handler(CommandHandler("time", livetime.start_live_time))
     app.add_handler(MessageHandler(filters.Regex(r'^[\./]time'), livetime.start_live_time))
 
-    # ✅ REGISTER NEW COMMANDS
-    app.add_handler(CommandHandler(["gchat", "Gchat"], toggle_gchat))
+    # ✅ REGISTER NEW COMMANDS (ONLY GSTICKER)
     app.add_handler(CommandHandler(["gsticker", "Gsticker"], toggle_gsticker))
 
     app.add_handler(CallbackQueryHandler(callback_handler))
@@ -450,10 +441,10 @@ def main():
     
     app.add_handler(MessageHandler(filters.Regex(r'(?i)^[\./]crank'), chatstat.show_leaderboard))
     
-    # 🔥 Plugins LOAD (Music vagera)
+    # 🔥 Plugins LOAD
     load_plugins(app)
 
-    # 🔥 REGISTER BROADCAST HANDLER (MANUAL)
+    # 🔥 REGISTER BROADCAST HANDLER
     register_broadcast_handlers(app)
 
     # Note: 'handle_message' catches ALL text, so it must be last
