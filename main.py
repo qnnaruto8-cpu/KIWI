@@ -100,7 +100,7 @@ async def on_startup(application: Application):
         except Exception as e: 
             print(f"⚠️ Logger Error: {e}")
 
-# --- ⚙️ GSTICKER COMMAND (GChat Removed) ---
+# --- ⚙️ GSTICKER COMMAND ---
 
 async def toggle_gsticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -117,10 +117,10 @@ async def toggle_gsticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.args[0].lower()
     if state == "on":
         set_group_setting(chat.id, "sticker_mode", True)
-        await update.message.reply_text(f"✅ **ꜱᴛɪᴄᴋᴇʀ ᴍᴏᴅᴇ ᴇɴᴀʙʟᴇᴅ!**\nɪ ᴡɪʟʟ ʀᴇᴘʟʏ ᴡɪᴛʜ ꜱᴛɪᴄᴋᴇʀꜱ.")
+        await update.message.reply_text(f"✅ **ꜱᴛɪᴄᴋᴇʀ ᴍᴏᴅᴇ ᴇɴᴀʙʟᴇᴅ!**\n20% ᴄʜᴀɴᴄᴇ ᴛᴏ ʀᴇᴘʟʏ ᴡɪᴛʜ ꜱᴛɪᴄᴋᴇʀꜱ.")
     elif state == "off":
         set_group_setting(chat.id, "sticker_mode", False)
-        await update.message.reply_text(f"🚫 **ꜱᴛɪᴄᴋᴇʀ ᴍᴏᴅᴇ ᴅɪꜱᴀʙʟᴇᴅ!**\nɴᴏ ᴍᴏʀᴇ ꜱᴛɪᴄᴋᴇʀꜱ ɪɴ ʀᴇᴘʟʏ.")
+        await update.message.reply_text(f"🚫 **ꜱᴛɪᴄᴋᴇʀ ᴍᴏᴅᴇ ᴅɪꜱᴀʙʟᴇᴅ!**\nBot will only reply to stickers if you reply to it.")
     else:
         await update.message.reply_text("⚠️ ᴜꜱᴀɢᴇ: `/ɢꜱᴛɪᴄᴋᴇʀ ᴏɴ` ᴏʀ `/ɢꜱᴛɪᴄᴋᴇʀ ᴏꜰꜰ`")
 
@@ -273,13 +273,47 @@ async def callback_handler(update, context):
         await livetime.close_time(update, context)
         return
 
+# --- 🔥 NEW STICKER HANDLER (Fix for Stickers) ---
+async def handle_incoming_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    user = update.effective_user
+    
+    # Check if message is actually a sticker
+    if not update.message or not update.message.sticker:
+        return
+
+    # Settings Check
+    settings = get_group_settings(chat.id)
+    sticker_mode = settings.get("sticker_mode", False) if settings else False
+
+    should_reply = False
+
+    # Logic 1: Agar Bot ko Reply kiya hai (100% Chance)
+    if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
+        should_reply = True
+    
+    # Logic 2: Agar GSticker ON hai toh 20% Random Chance
+    elif sticker_mode:
+        if random.randint(1, 100) <= 20: # 20% probability
+            should_reply = True
+
+    if should_reply:
+        # Get random Mimi/Yuki sticker
+        try:
+            sticker_id = await get_mimi_sticker(user.id)
+            if sticker_id:
+                await update.message.reply_sticker(sticker_id)
+        except Exception as e:
+            print(f"Sticker Error: {e}")
+
+
 # --- 🔥 FIXED MESSAGE HANDLER (STRICT REPLY ONLY MODE) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # 1. Basic Checks
         if not update.message: return
         text = update.message.text
-        if not text: return 
+        if not text: return # Ye sirf TEXT handle karega (Stickers alag function me hain)
 
         user = update.effective_user
         chat = update.effective_chat
@@ -421,6 +455,9 @@ def main():
     # 🔥 REGISTER BROADCAST HANDLER (MANUAL)
     register_broadcast_handlers(app)
 
+    # ✅ IMPORTANT: Sticker Handler Added
+    app.add_handler(MessageHandler(filters.STICKER, handle_incoming_sticker), group=11)
+
     # ✅ IMPORTANT: 'group=10' ensures this runs in parallel with plugins
     app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message), group=10)
 
@@ -429,4 +466,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-            
+    
