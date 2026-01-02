@@ -14,10 +14,10 @@ API_HASH = getenv("API_HASH", "")
 # 🔥 Ye 3 nayi lines add karo:
 OWNER_USERNAME = "@Prince_Username"  # Apna Username yahan daalo (bina @ ke bhi chalega string hai)
 GROUP_NAME = "Prince Support"        # Apne Group ka naam
-GROUP_LINK = "https://t.me/+KNd7I2tIFuVlYmY9" # Apne Group ka Link
+GROUP_LINK = "https://t.me/Kiwi_musicsupport" # Apne Group ka Link
 
 # config.py
-INSTAGRAM_LINK = "https://www.instagram.com/ll_your_boss_ll" # Yahan apna link daal dena
+INSTAGRAM_LINK = "https://t.me/Kiwi_musicsupport" # Yahan apna link daal den
 
 # --- FIX IS HERE ---
 # Humne BOT_TOKEN define kiya, aur TELEGRAM_TOKEN ko uska copy bana diya
@@ -35,17 +35,17 @@ MONGO_URL = MONGO_DB_URI # Alias for Main.py support
 # =========================================
 # 👑 OWNER & ASSISTANT CONFIGURATION
 # =========================================
-OWNER_IDS = [7453179290, 6356015122]
+OWNER_IDS = [8560671423, 6356015122]
 
 OWNER_ID = int(getenv("OWNER_ID", OWNER_IDS[0]))
-OWNER_USERNAME = getenv("OWNER_USERNAME", "@THE_BOSS_JI")
-OWNER_NAME = getenv("OWNER_NAME", "BOSS JI")
+OWNER_USERNAME = getenv("OWNER_USERNAME", "@II_Mikey")
+OWNER_NAME = getenv("OWNER_NAME", "mikey")
 
 ASSISTANT_ID = int(getenv("ASSISTANT_ID", "8457855985"))
 LOGGER_ID = int(getenv("LOGGER_ID", "-1003639584506"))
 LOG_GROUP_ID = -1003639584506
 
-BOT_NAME = getenv("BOT_NAME", "𝚲𝛈𝛊𝛄𝛂me ")
+BOT_NAME = getenv("BOT_NAME", "ℳ𝒾𝓈𝓈 𝒮𝒽𝒾𝓃𝒿𝓊 ")
 
 # =========================================
 # 🎮 GAME & ECONOMY SETTINGS
@@ -97,7 +97,7 @@ confirmer = {}
 
 SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/hehe_heeeeee")
 SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/hehe_heeeeee")
-UPDATE_CHANNEL = "https://t.me/+5Vy9Hsz0DApjYzE1"
+UPDATE_CHANNEL = "https://t.me/Kiwi_musicsupport"
 
 if SUPPORT_CHANNEL and not re.match("(?:http|https)://", SUPPORT_CHANNEL):
     print("[WARN] - Your SUPPORT_CHANNEL url is wrong.")
