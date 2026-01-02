@@ -205,7 +205,7 @@ async def deduct_money(user_id: int, amount: int):
     return True
 
 # ==========================================
-#        ⚙️ SETTINGS FUNCTIONS
+#        ⚙️ SETTINGS & MAINTENANCE
 # ==========================================
 
 # 1. Admin Command Mode (Legacy)
@@ -222,7 +222,7 @@ async def is_admincmd_enabled(chat_id: int):
         return True
     return data.get("admin_list_enabled", True)
 
-# 2. Global Music Mode (New with Reason)
+# 2. Global Music Mode
 async def set_global_music(state: bool, reason: str = None):
     data = {"is_enabled": state}
     if reason:
@@ -241,6 +241,32 @@ async def get_music_status():
     if not data:
         return True, None
     return data.get("is_enabled", True), data.get("reason", None)
+
+# 🔥 3. NEW: MAINTENANCE MODE (Updated for Status + Custom Message) 🔥
+async def get_maintenance_data():
+    """Returns a dict: {'state': bool, 'message': str}"""
+    try:
+        data = await settings_db.find_one({"_id": "MAINTENANCE_STATUS"}) 
+        if not data:
+            return {"state": False, "message": None}
+        return data
+    except:
+        return {"state": False, "message": None}
+
+async def set_maintenance(state: bool, message: str = None):
+    """Set Maintenance Mode with Message"""
+    try:
+        data = {"state": state}
+        if message:
+            data["message"] = message
+            
+        await settings_db.update_one(
+            {"_id": "MAINTENANCE_STATUS"},
+            {"$set": data},
+            upsert=True
+        )
+    except:
+        pass
 
 # ==========================================
 #        📝 FILTER SYSTEM FUNCTIONS
