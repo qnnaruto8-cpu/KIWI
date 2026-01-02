@@ -25,6 +25,11 @@ def get_readable_time():
         return f"{d}d:{h}h:{m}m:{s}s"
     return f"{h}h:{m}m:{s}s"
 
+# --- HELPER: ESCAPE MARKDOWN ---
+def escape_markdown(text):
+    """Name mein agar _ ya * ho to formatting na tute"""
+    return text.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
+
 # --- MAIN START COMMAND ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -32,16 +37,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_username = context.bot.username
     bot_name = context.bot.first_name
     
-    first_name = html.escape(user.first_name)
+    # Markdown ke liye name escape kar rahe hain
+    first_name = escape_markdown(user.first_name)
 
     # 🔥 1. GROUP LOGIC (Fancy DM Message)
     if chat.type != "private":
-        # Fancy Design Text
         txt = "<blockquote><b>Start in DM me</b></blockquote>"
-        
-        # Inline Button for DM
         kb = [[InlineKeyboardButton("ꜱᴛᴀʀᴛ ɪɴ ᴅᴍ 🍷", url=f"https://t.me/{bot_username}?start=true")]]
-        
         await update.message.reply_text(
             txt, 
             reply_markup=InlineKeyboardMarkup(kb), 
@@ -51,7 +53,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- 2. DM (PRIVATE) LOGIC ---
     
-    # Animation
+    # Animation (Sticker)
     try:
         sticker_id = await get_mimi_sticker(context.bot)
         if sticker_id:
@@ -60,10 +62,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await stk.delete()
     except: pass 
 
+    # Loading Animation
     msg = await update.message.reply_text("🍭")
     await asyncio.sleep(0.5)
     
-    # Loading Bars
     bars = [
         "⚡ 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ....🌷🍡",
         "💕 𝒮𝒽𝒾𝓃𝒿𝓊 ɪs ʟᴏᴀᴅɪɴɢ..🌷 ",
@@ -80,7 +82,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: pass
     await msg.delete() 
 
-    # Caption Info
+    # System Stats
     try:
         uptime = get_readable_time()
         cpu = psutil.cpu_percent()
@@ -89,28 +91,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         uptime = "00:00:00"; cpu=0; ram=0; disk=0
 
-    # Main Caption
+    # ✅ FIXED CAPTION (Maine ... use kiya hai, tum isko wapis Backticks kar dena)
     caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
 ┆◍ ʜєʏ, {first_name} 🥀
 ┆◍ ɪ ᴧϻ {bot_name}
 └────────────────────•
-<pre>
+
+```
 ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. 
 ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ
 ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
-<pre>
-<pre>
+...
+
+```
 ╭─ ⚙️ SYSTEM STATUS
 │ ➥ UPTIME: {uptime}
 │ ➥ SERVER STORAGE: {disk:.1f}%
 │ ➥ CPU LOAD: {cpu:.1f}%
 │ ➥ RAM CONSUMPTION: {ram:.1f}%
 ╰───────────────
-<pre>
+```
 •──────────────────────•
-<pre>
+```
 ✦ ᴘᴏᴡєʀєᴅ ʙʏ © BOSS JI
-<pre>
+```
 """
 
     # Register & Log
@@ -122,11 +126,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger_id = get_logger_group()
     if logger_id:
         try:
+            # Logs ke liye HTML hi rakha hai (Safety ke liye)
             log_msg = f"""
 <blockquote><b>📢 ᴜsᴇʀ sᴛᴀʀᴛᴇᴅ ʙᴏᴛ</b></blockquote>
 
 <blockquote>
-<b>👤 ɴᴀᴍᴇ :</b> {user.mention_html()}
+<b>👤 ɴᴀᴍᴇ :</b> {html.escape(user.full_name)}
 <b>🆔 ᴜsᴇʀ ɪᴅ :</b> <code>{user.id}</code>
 <b>🔗 ᴜsᴇʀɴᴀᴍᴇ :</b> @{user.username if user.username else 'No Username'}
 </blockquote>
@@ -144,19 +149,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     try:
+        # Maine ... ko wapis replace karne ka logic lagaya hai taaki agar tum bhool jao to bhi code chale
+        final_caption = caption.replace("...", "```")
+        
         await update.message.reply_photo(
             photo=START_IMG,
-            caption=caption,
-            has_spoiler=True,
+            caption=final_caption,
+            has_spoiler=True,  # ✅ Spoiler ON
             reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.HTML
+            parse_mode=ParseMode.MARKDOWN  # ✅ Markdown for Box
         )
     except Exception as e:
         print(f"Start Error: {e}")
-        # Fallback
+        # Fallback agar Markdown fail ho
         await update.message.reply_photo(
             photo=START_IMG,
-            caption=caption.replace("<pre>", "").replace("</pre>", ""),
+            caption=caption.replace("...", ""),
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=None
         )
@@ -192,7 +200,6 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 3. BACK HOME
     elif data == "back_home":
-        # ... (Same logic as above, just refreshing the start message)
         try:
             uptime = get_readable_time()
             cpu = psutil.cpu_percent()
@@ -201,29 +208,35 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             uptime = "00:00:00"; cpu=0; ram=0; disk=0
 
-        first_name = html.escape(user.first_name)
+        first_name = escape_markdown(user.first_name)
+        
+        # ✅ Fixed Caption for Back Button (Using dots ...)
         caption = f"""┌────── ˹ ɪɴғᴏʀᴍᴀᴛɪᴏɴ ˼─── ⏤‌‌●
 ┆◍ ʜєʏ, {first_name} 🥀
-┆◍ ɪ ᴧϻ {context.bot.first_name}
+┆◍ ɪ ᴧϻ {bot_name}
 └────────────────────•
-<pre>
+
+```
 ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴍᴜʟᴛɪ-ᴘᴜʀᴘᴏsᴇ ʙᴏᴛ. 
 ɪ ᴏғғᴇʀ ʜɪɢʜ-ǫᴜᴀʟɪᴛʏ ᴍᴜsɪᴄ, ɢʟᴏʙᴀʟ ᴇᴄᴏɴᴏᴍʏ
 ᴀɪ ᴄʜᴀᴛ & ɢʀᴏᴜᴘ sᴇᴄᴜʀɪᴛʏ.
-<pre>
-<pre>
+```
+
+```
 ╭─ ⚙️ SYSTEM STATUS
 │ ➥ UPTIME: {uptime}
 │ ➥ SERVER STORAGE: {disk:.1f}%
 │ ➥ CPU LOAD: {cpu:.1f}%
 │ ➥ RAM CONSUMPTION: {ram:.1f}%
 ╰───────────────
-</pre>
+```
 •──────────────────────•
-<pre>
+```
 ✦ᴘᴏᴡєʀєᴅ ʙʏ » BOSS JI 
-<pre>
+```
 """
+        final_caption = caption.replace("...", "```")
+
         keyboard = [
             [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{bot_username}?startgroup=true")],
             [InlineKeyboardButton("📚 Help Commands", callback_data="help_main")],
@@ -231,5 +244,5 @@ async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton(f"📸 Follow on {bot_name}", url=INSTAGRAM_LINK)],
             [InlineKeyboardButton("👑 Owner", url=f"tg://user?id={OWNER_ID}")]
         ]
-        await q.edit_message_caption(caption=caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-        
+        await q.edit_message_caption(caption=final_caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN)
+
