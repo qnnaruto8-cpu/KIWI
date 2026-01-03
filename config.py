@@ -38,7 +38,7 @@ MONGO_URL = MONGO_DB_URI # Alias for Main.py support
 OWNER_IDS = [8560671423, 6356015122]
 
 OWNER_ID = int(getenv("OWNER_ID", OWNER_IDS[0]))
-OWNER_USERNAME = getenv("OWNER_USERNAME", "@II_Mikey")
+OWNER_USERNAME = getenv("OWNER_USERNAME", "II_Mikey")
 OWNER_NAME = getenv("OWNER_NAME", "mikey")
 
 ASSISTANT_ID = int(getenv("ASSISTANT_ID", "8457855985"))
