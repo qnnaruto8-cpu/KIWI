@@ -311,3 +311,32 @@ def get_group_settings(chat_id):
         "sticker_mode": settings.get("sticker_mode", True)
     }
     
+# --- 10. ADMIN PANEL / AI MODEL SWITCH (New Additions) ---
+
+def set_active_chat_model(model_name):
+    """Admin panel se 'gemini' ya 'groq' set karne ke liye"""
+    settings_col.update_one(
+        {"_id": "ai_chat_settings"}, 
+        {"$set": {"active_model": model_name.lower()}}, 
+        upsert=True
+    )
+
+def get_active_chat_model():
+    """AI_chat.py check karega ki kaunsa model chalana hai"""
+    data = settings_col.find_one({"_id": "ai_chat_settings"})
+    # Default 'gemini' rakha hai agar DB me kuch na ho
+    return data["active_model"] if data and "active_model" in data else "gemini"
+
+def set_groq_api_key(api_key):
+    """Database me Groq ki API key save karne ke liye"""
+    settings_col.update_one(
+        {"_id": "ai_chat_settings"}, 
+        {"$set": {"groq_key": api_key.strip()}}, 
+        upsert=True
+    )
+
+def get_groq_api_key():
+    """Groq API key fetch karne ke liye"""
+    data = settings_col.find_one({"_id": "ai_chat_settings"})
+    return data.get("groq_key") if data else None
+    
