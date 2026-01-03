@@ -355,7 +355,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif f"@{bot_username}" in text_lower:
                 should_reply = True
             # 3. Name Call (Aniya)
-            elif "aniya" in text_lower:
+            elif "shinju" in text_lower:
                 should_reply = True
         
         # Agar upar wali koi condition match nahi hui, to RETURN (Chup raho)
